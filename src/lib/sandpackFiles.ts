@@ -3,40 +3,48 @@ export function buildFilesForSandpack(code: string) {
   const appFile = "/src/App.tsx";
   // const indexFile = "/src/main.tsx";
 
-//   [indexFile]: {
-//     code: `import React from 'react';
-// import ReactDOM from 'react-dom/client';
-// import App from './App.tsx';
-// import './index.css';
+  //   [indexFile]: {
+  //     code: `import React from 'react';
+  // import ReactDOM from 'react-dom/client';
+  // import App from './App.tsx';
+  // import './index.css';
 
-// ReactDOM.createRoot(document.getElementById('root')!).render(
-// <React.StrictMode>
-//     <App />
-// </React.StrictMode>
-// );
-// `,
-//   },
-// "/src/index.css": {
-//   code: `/* Fallback solo para Sandpack: hoja compilada de Tailwind v3 (sin tocar index.html) */
-// @import url("https://cdn.jsdelivr.net/npm/tailwindcss@3.4.3/dist/tailwind.min.css");
+  // ReactDOM.createRoot(document.getElementById('root')!).render(
+  // <React.StrictMode>
+  //     <App />
+  // </React.StrictMode>
+  // );
+  // `,
+  //   },
+  // "/src/index.css": {
+  //   code: `/* Fallback solo para Sandpack: hoja compilada de Tailwind v3 (sin tocar index.html) */
+  // @import url("https://cdn.jsdelivr.net/npm/tailwindcss@3.4.3/dist/tailwind.min.css");
 
-// @tailwind base;
-// @tailwind components;
-// @tailwind utilities;
+  // @tailwind base;
+  // @tailwind components;
+  // @tailwind utilities;
 
-// html, body, #root { height: 100%; }
-// body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }`,
-// },
-// "/postcss.config.js": {
-//   code: `export default {
-// plugins: {
-// tailwindcss: {},
-// autoprefixer: {},
-// },
-// }`,
-// },
+  // html, body, #root { height: 100%; }
+  // body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }`,
+  // },
+  // "/postcss.config.js": {
+  //   code: `export default {
+  // plugins: {
+  // tailwindcss: {},
+  // autoprefixer: {},
+  // },
+  // }`,
+  // },
   const files: Record<string, { code: string }> = {
     [appFile]: { code },
+    "/postcss.config.js": {
+      code: `export default {
+plugins: {
+tailwindcss: {},
+autoprefixer: {},
+},
+}`,
+    },
     "/index.html": {
       code: `<!doctype html>
 <html lang="es">
@@ -52,7 +60,7 @@ export function buildFilesForSandpack(code: string) {
   </body>
 </html>`,
     },
-   
+
     "/tailwind.config.ts": {
       code: `import type { Config } from 'tailwindcss'
 
