@@ -69,7 +69,7 @@ function AppContent() {
     webcontainer: false,
   });
   const [loadedCodeByMode, setLoadedCodeByMode] = useState<
-    Record<PreviewMode, { code: string; filename: string } | null>
+    Record<PreviewMode, { code: string; filename: string; extras?: import("./lib/webcontainerMoreFiles").DynamicFileEntry[] } | null>
   >({
     "react-live": null,
     iframe: null,
@@ -115,8 +115,8 @@ function AppContent() {
 
   // Manejar cuando se carga código dinámicamente
   const handleCodeLoadedForMode =
-    (mode: PreviewMode) => (code: string, filename: string) => {
-      setLoadedCodeByMode((prev) => ({ ...prev, [mode]: { code, filename } }));
+    (mode: PreviewMode) => (code: string, filename: string, extras?: import("./lib/webcontainerMoreFiles").DynamicFileEntry[]) => {
+      setLoadedCodeByMode((prev) => ({ ...prev, [mode]: { code, filename, extras } }));
       setIsGeneratingByMode((prev) => ({ ...prev, [mode]: false }));
     };
 
@@ -263,8 +263,7 @@ function AppContent() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Usa mock (1 componente) o n8n (1 componente).
-                    "more-components" aún en WIP.
+                    Soporta mock (1 ó varios componentes) y n8n (1 componente). "more-components" IA aún en desarrollo.
                   </p>
                 </div>
               </form>
@@ -486,6 +485,7 @@ function AppContent() {
                   <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[calc(100vh-200px)]">
                     <WebContainerPreview
                       code={loadedCode.code}
+                      extras={loadedCode.extras}
                       className="h-full"
                     />
                   </div>

@@ -9,7 +9,7 @@ interface DynamicWebContainerPreviewProps {
     description: string;
   };
   env: PreviewEnv;
-  onCodeLoaded?: (code: string, filename: string) => void;
+  onCodeLoaded?: (code: string, filename: string, extras?: import("../../lib/webcontainerMoreFiles").DynamicFileEntry[]) => void;
   onCancel?: () => void;
   messages?: string[];
 }
@@ -21,7 +21,7 @@ function useLoadCode(
   const [codeData, setCodeData] = React.useState<{
     code: string;
     file: string;
-  } | null>(null);
+  } & { extras?: import("../../lib/webcontainerMoreFiles").DynamicFileEntry[] } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -31,7 +31,7 @@ function useLoadCode(
     loadCodeWithCache(cacheKey, () => loadCodeForEnv(projectData, env))
       .then((result) => {
         if (cancelled) return;
-        setCodeData(result);
+        setCodeData(result as typeof result & { extras?: import("../../lib/webcontainerMoreFiles").DynamicFileEntry[] });
         setError(null);
       })
       .catch((err) => {
@@ -86,7 +86,7 @@ function CodeRenderer({
 
   React.useEffect(() => {
     if (codeData && onCodeLoaded) {
-      onCodeLoaded(codeData.code, codeData.file);
+      onCodeLoaded(codeData.code, codeData.file, codeData.extras);
     }
   }, [codeData, onCodeLoaded]);
 

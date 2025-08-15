@@ -128,10 +128,5 @@
     "path": "src/App.tsx",
     "code": "import { BrowserRouter, Routes, Route } from 'react-router-dom';\nimport Home from './pages/Home';\nimport Login from './pages/Login';\nimport Register from './pages/Register';\nimport RoomDetail from './pages/RoomDetail';\nimport Reservations from './pages/Reservations';\nimport { AuthProvider } from './contexts/AuthContext';\nimport { RoomsProvider } from './contexts/RoomsContext';\nimport { ReservationsProvider } from './contexts/ReservationsContext';\nimport { ProtectedRoute } from './components/shared/ProtectedRoute';\nexport default function App(){\n  return(\n    <AuthProvider>\n      <RoomsProvider>\n        <ReservationsProvider>\n          <BrowserRouter>\n            <Routes>\n              <Route path='/' element={<Home/>}/>\n              <Route path='/login' element={<Login/>}/>\n              <Route path='/register' element={<Register/>}/>\n              <Route path='/rooms/:id' element={<RoomDetail/>}/>\n              <Route element={<ProtectedRoute/>}>\n                <Route path='/reservations' element={<Reservations/>}/>\n              </Route>\n            </Routes>\n          </BrowserRouter>\n        </ReservationsProvider>\n      </RoomsProvider>\n    </AuthProvider>\n  );\n}",
     "overwrite": true
-  },
-  {
-    "path": "src/main.tsx",
-    "code": "import React from 'react';\nimport { createRoot } from 'react-dom/client';\nimport App from './App';\nimport './index.css';\ncreateRoot(document.getElementById('root') as HTMLElement).render(<React.StrictMode><App/></React.StrictMode>);",
-    "overwrite": true
   }
 ]

@@ -1,26 +1,42 @@
 export function buildFilesForSandpack(code: string) {
   // Estructura tipo Vite: /index.html + /src/main.tsx + /src/App.tsx + Tailwind por PostCSS
   const appFile = "/src/App.tsx";
-  const indexFile = "/src/main.tsx";
+  // const indexFile = "/src/main.tsx";
 
+//   [indexFile]: {
+//     code: `import React from 'react';
+// import ReactDOM from 'react-dom/client';
+// import App from './App.tsx';
+// import './index.css';
+
+// ReactDOM.createRoot(document.getElementById('root')!).render(
+// <React.StrictMode>
+//     <App />
+// </React.StrictMode>
+// );
+// `,
+//   },
+// "/src/index.css": {
+//   code: `/* Fallback solo para Sandpack: hoja compilada de Tailwind v3 (sin tocar index.html) */
+// @import url("https://cdn.jsdelivr.net/npm/tailwindcss@3.4.3/dist/tailwind.min.css");
+
+// @tailwind base;
+// @tailwind components;
+// @tailwind utilities;
+
+// html, body, #root { height: 100%; }
+// body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }`,
+// },
+// "/postcss.config.js": {
+//   code: `export default {
+// plugins: {
+// tailwindcss: {},
+// autoprefixer: {},
+// },
+// }`,
+// },
   const files: Record<string, { code: string }> = {
     [appFile]: { code },
-    [indexFile]: {
-      code: `import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-import './index.css';
-import { BrowserRouter } from 'react-router-dom';
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  </React.StrictMode>
-);
-`,
-    },
     "/index.html": {
       code: `<!doctype html>
 <html lang="es">
@@ -36,25 +52,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </body>
 </html>`,
     },
-    "/src/index.css": {
-      code: `/* Fallback solo para Sandpack: hoja compilada de Tailwind v3 (sin tocar index.html) */
-@import url("https://cdn.jsdelivr.net/npm/tailwindcss@3.4.3/dist/tailwind.min.css");
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html, body, #root { height: 100%; }
-body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }`,
-    },
-    "/postcss.config.js": {
-      code: `export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}`,
-    },
+   
     "/tailwind.config.ts": {
       code: `import type { Config } from 'tailwindcss'
 
@@ -145,11 +143,11 @@ export default config`,
             /* Aliases */
             baseUrl: ".",
             paths: {
-              "@/*": ["src/*"]
-            }
+              "@/*": ["src/*"],
+            },
           },
           include: ["src"],
-          references: [{ path: "./tsconfig.node.json" }]
+          references: [{ path: "./tsconfig.node.json" }],
         },
         null,
         2
@@ -165,9 +163,9 @@ export default config`,
             moduleResolution: "bundler",
             allowSyntheticDefaultImports: true,
             strict: true,
-            types: ["node"]
+            types: ["node"],
           },
-          include: ["vite.config.ts"]
+          include: ["vite.config.ts"],
         },
         null,
         2
@@ -184,7 +182,7 @@ export default config`,
             dev: "vite",
             build: "tsc && vite build",
             lint: "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-            preview: "vite preview"
+            preview: "vite preview",
           },
           dependencies: {
             clsx: "^2.1.1",
@@ -192,7 +190,7 @@ export default config`,
             react: "^18.2.0",
             "react-dom": "^18.2.0",
             "react-router-dom": "^6.23.1",
-            "tailwind-merge": "^2.3.0"
+            "tailwind-merge": "^2.3.0",
           },
           devDependencies: {
             "@types/node": "^24.2.1",
@@ -210,8 +208,8 @@ export default config`,
             "prettier-plugin-tailwindcss": "^0.5.14",
             tailwindcss: "^3.4.3",
             typescript: "^5.2.2",
-            vite: "^5.2.0"
-          }
+            vite: "^5.2.0",
+          },
         },
         null,
         2
@@ -413,7 +411,7 @@ Thumbs.db`,
     </linearGradient>
   </defs>
   <path fill="url(#g)" d="M399.6 57.7L215.6 388.4c-3.7 6.6-13.3 6.6-17 0L10.4 57.7c-4.2-7.6 2.3-16.7 10.8-15.4l174.8 27.3a10 10 0 0 0 11.6-7.7l27.1-104.6c2.1-7.9 13.4-7.9 15.6 0l27.1 104.6a10 10 0 0 0 11.6 7.7l174.8-27.3c8.5-1.3 15 7.8 10.8 15.4z"/>
-</svg>`
+</svg>`,
     },
   };
 

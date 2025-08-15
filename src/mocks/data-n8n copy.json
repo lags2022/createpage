@@ -1,0 +1,137 @@
+[
+  {
+    "path": "src/lib/types/Product.ts",
+    "code": "export interface Product {\n  id: string;\n  name: string;\n  sku: string;\n  price: number;\n  stock: number;\n  minStock: number; // punto de reorden\n  category?: string;\n  createdAt: string;\n  updatedAt: string;\n}\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/lib/types/Sale.ts",
+    "code": "export interface Sale {\n  id: string;\n  productId: string;\n  quantity: number;\n  total: number;\n  date: string;\n}\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/lib/types/Alert.ts",
+    "code": "export interface StockAlert {\n  id: string;\n  productId: string;\n  message: string;\n  createdAt: string;\n  read: boolean;\n}\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/lib/utils/formatCurrency.ts",
+    "code": "export const formatCurrency = (value: number, currency: string = \"USD\") =>\n  new Intl.NumberFormat(\"es-ES\", {\n    style: \"currency\",\n    currency,\n  }).format(value);\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/lib/utils/calcStock.ts",
+    "code": "import { Product } from \"../types/Product\";\n\nexport const calcStockStatus = (product: Product) => {\n  if (product.stock <= product.minStock) return \"low\";\n  if (product.stock === 0) return \"out\";\n  return \"ok\";\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/services/productService.ts",
+    "code": "import { Product } from \"../lib/types/Product\";\nimport { v4 as uuid } from \"uuid\";\n\nconst STORAGE_KEY = \"inventary2_products\";\n\nconst getData = (): Product[] => {\n  const raw = localStorage.getItem(STORAGE_KEY);\n  return raw ? JSON.parse(raw) : [];\n};\n\nconst persist = (products: Product[]) => {\n  localStorage.setItem(STORAGE_KEY, JSON.stringify(products));\n};\n\nexport const productService = {\n  async list(): Promise<Product[]> {\n    // simulamos latencia\n    return new Promise((res) => setTimeout(() => res(getData()), 500));\n  },\n  async create(data: Omit<Product, \"id\" | \"createdAt\" | \"updatedAt\">) {\n    const products = getData();\n    const newProduct: Product = {\n      ...data,\n      id: uuid(),\n      createdAt: new Date().toISOString(),\n      updatedAt: new Date().toISOString(),\n    };\n    products.push(newProduct);\n    persist(products);\n    return newProduct;\n  },\n  async update(id: string, changes: Partial<Product>) {\n    let products = getData();\n    products = products.map((p) =>\n      p.id === id ? { ...p, ...changes, updatedAt: new Date().toISOString() } : p\n    );\n    persist(products);\n    return products.find((p) => p.id === id)!;\n  },\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/services/reportService.ts",
+    "code": "import { Sale } from \"../lib/types/Sale\";\nimport { formatCurrency } from \"../lib/utils/formatCurrency\";\n\nexport const reportService = {\n  async monthly(month: number, year: number) {\n    const dummy: Sale[] = [];\n    // Simulación con datos aleatorios\n    for (let i = 1; i <= 10; i++) {\n      dummy.push({\n        id: `${year}-${month}-${i}`,\n        productId: `prod-${i}`,\n        quantity: Math.floor(Math.random() * 20),\n        total: Math.random() * 100,\n        date: new Date(year, month, i).toISOString(),\n      });\n    }\n    const total = dummy.reduce((acc, s) => acc + s.total, 0);\n    return {\n      sales: dummy,\n      totalFormatted: formatCurrency(total),\n    };\n  },\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/services/alertService.ts",
+    "code": "import { StockAlert } from \"../lib/types/Alert\";\nimport { v4 as uuid } from \"uuid\";\n\nconst alerts: StockAlert[] = [];\n\nexport const alertService = {\n  async list() {\n    return alerts;\n  },\n  async create(productId: string, message: string) {\n    const alert: StockAlert = {\n      id: uuid(),\n      productId,\n      message,\n      createdAt: new Date().toISOString(),\n      read: false,\n    };\n    alerts.push(alert);\n    return alert;\n  },\n  async markRead(id: string) {\n    const alert = alerts.find((a) => a.id === id);\n    if (alert) alert.read = true;\n    return alert;\n  },\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/contexts/ProductContext.tsx",
+    "code": "import React, { createContext, useContext, useEffect, useState } from \"react\";\nimport { Product } from \"../lib/types/Product\";\nimport { productService } from \"../services/productService\";\n\ninterface ProductContextProps {\n  products: Product[];\n  loading: boolean;\n  addProduct: (p: Omit<Product, \"id\" | \"createdAt\" | \"updatedAt\">) => Promise<void>;\n  updateProduct: (id: string, changes: Partial<Product>) => Promise<void>;\n}\n\nconst ProductContext = createContext<ProductContextProps | undefined>(undefined);\n\nexport const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {\n  const [products, setProducts] = useState<Product[]>([]);\n  const [loading, setLoading] = useState(true);\n\n  useEffect(() => {\n    productService.list().then((data) => {\n      setProducts(data);\n      setLoading(false);\n    });\n  }, []);\n\n  const addProduct: ProductContextProps[\"addProduct\"] = async (p) => {\n    const newP = await productService.create(p);\n    setProducts((prev) => [...prev, newP]);\n  };\n\n  const updateProduct: ProductContextProps[\"updateProduct\"] = async (id, c) => {\n    const updated = await productService.update(id, c);\n    setProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));\n  };\n\n  return (\n    <ProductContext.Provider value={{ products, loading, addProduct, updateProduct }}>\n      {children}\n    </ProductContext.Provider>\n  );\n};\n\nexport const useProductContext = () => {\n  const ctx = useContext(ProductContext);\n  if (!ctx) throw new Error(\"useProductContext must be used within ProductProvider\");\n  return ctx;\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/contexts/AlertContext.tsx",
+    "code": "import React, { createContext, useContext, useEffect, useState } from \"react\";\nimport { StockAlert } from \"../lib/types/Alert\";\nimport { alertService } from \"../services/alertService\";\n\ninterface AlertCtx {\n  alerts: StockAlert[];\n  refresh: () => void;\n  markRead: (id: string) => void;\n}\n\nconst AlertContext = createContext<AlertCtx | undefined>(undefined);\n\nexport const AlertProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {\n  const [alerts, setAlerts] = useState<StockAlert[]>([]);\n\n  const refresh = () => {\n    alertService.list().then(setAlerts);\n  };\n\n  useEffect(refresh, []);\n\n  const markRead = (id: string) => {\n    alertService.markRead(id).then(() => refresh());\n  };\n\n  return (\n    <AlertContext.Provider value={{ alerts, refresh, markRead }}>\n      {children}\n    </AlertContext.Provider>\n  );\n};\n\nexport const useAlertContext = () => {\n  const ctx = useContext(AlertContext);\n  if (!ctx) throw new Error(\"useAlertContext must be used within AlertProvider\");\n  return ctx;\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/hooks/useProducts.ts",
+    "code": "import { useProductContext } from \"../contexts/ProductContext\";\nexport const useProducts = () => useProductContext();\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/hooks/useAlerts.ts",
+    "code": "import { useAlertContext } from \"../contexts/AlertContext\";\nexport const useAlerts = () => useAlertContext();\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/hooks/useDashboardMetrics.ts",
+    "code": "import { useMemo } from \"react\";\nimport { useProducts } from \"./useProducts\";\nimport { formatCurrency } from \"../lib/utils/formatCurrency\";\n\nexport const useDashboardMetrics = () => {\n  const { products } = useProducts();\n\n  return useMemo(() => {\n    const totalProducts = products.length;\n    const inventoryValue = products.reduce((acc, p) => acc + p.price * p.stock, 0);\n    const lowStock = products.filter((p) => p.stock <= p.minStock).length;\n\n    return {\n      totalProducts,\n      inventoryValueFormatted: formatCurrency(inventoryValue),\n      lowStock,\n    };\n  }, [products]);\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/ui/Button.tsx",
+    "code": "import React from \"react\";\nimport clsx from \"clsx\";\n\ninterface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {\n  variant?: \"primary\" | \"secondary\" | \"danger\";\n}\n\nexport const Button: React.FC<ButtonProps> = ({\n  children,\n  className,\n  variant = \"primary\",\n  ...rest\n}) => {\n  const base =\n    \"px-4 py-2 rounded-md font-semibold transition-colors focus:outline-none disabled:opacity-60\";\n  const variants: Record<string, string> = {\n    primary: \"bg-blue-600 text-white hover:bg-blue-700\",\n    secondary: \"bg-gray-200 text-gray-900 hover:bg-gray-300\",\n    danger: \"bg-red-600 text-white hover:bg-red-700\",\n  };\n  return (\n    <button className={clsx(base, variants[variant], className)} {...rest}>\n      {children}\n    </button>\n  );\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/ui/Input.tsx",
+    "code": "import React from \"react\";\nimport clsx from \"clsx\";\n\ninterface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {}\n\nexport const Input = React.forwardRef<HTMLInputElement, InputProps>(\n  ({ className, ...rest }, ref) => (\n    <input\n      ref={ref}\n      className={clsx(\n        \"w-full border rounded-md px-3 py-2 text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent\",\n        className\n      )}\n      {...rest}\n    />\n  )\n);\nInput.displayName = \"Input\";\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/ui/Card.tsx",
+    "code": "import React from \"react\";\nimport clsx from \"clsx\";\n\nexport const Card: React.FC<{ className?: string }> = ({ children, className }) => (\n  <div className={clsx(\"bg-white shadow rounded-md p-4\", className)}>{children}</div>\n);\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/ui/Select.tsx",
+    "code": "import React from \"react\";\nimport clsx from \"clsx\";\n\ninterface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {}\n\nexport const Select = React.forwardRef<HTMLSelectElement, SelectProps>(\n  ({ className, children, ...rest }, ref) => (\n    <select\n      ref={ref}\n      className={clsx(\n        \"w-full border rounded-md px-3 py-2 bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent\",\n        className\n      )}\n      {...rest}\n    >\n      {children}\n    </select>\n  )\n);\nSelect.displayName = \"Select\";\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/layout/Header.tsx",
+    "code": "import React from \"react\";\nimport { Link, NavLink } from \"react-router-dom\";\n\nexport const Header: React.FC = () => (\n  <header className=\"bg-blue-600 text-white\">\n    <div className=\"max-w-7xl mx-auto px-4 py-3 flex justify-between items-center\">\n      <Link to=\"/\" className=\"font-bold text-lg\">\n        Inventary 2\n      </Link>\n      <nav className=\"flex gap-4\">\n        <NavLink to=\"/\" className={({ isActive }) => (isActive ? \"underline\" : \"\")}>Dashboard</NavLink>\n        <NavLink to=\"/products\" className={({ isActive }) => (isActive ? \"underline\" : \"\")}>Productos</NavLink>\n        <NavLink to=\"/reports\" className={({ isActive }) => (isActive ? \"underline\" : \"\")}>Reportes</NavLink>\n      </nav>\n    </div>\n  </header>\n);\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/layout/Footer.tsx",
+    "code": "import React from \"react\";\n\nexport const Footer: React.FC = () => (\n  <footer className=\"bg-gray-100 text-center py-4 text-sm text-gray-600\">\n    © {new Date().getFullYear()} Inventary 2\n  </footer>\n);\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/layout/MainLayout.tsx",
+    "code": "import React from \"react\";\nimport { Header } from \"./Header\";\nimport { Footer } from \"./Footer\";\n\nexport const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => (\n  <div className=\"min-h-screen flex flex-col\">\n    <Header />\n    <main className=\"flex-1 bg-gray-50 p-4\">{children}</main>\n    <Footer />\n  </div>\n);\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/shared/DashboardMetric.tsx",
+    "code": "import React from \"react\";\nimport { Card } from \"../ui/Card\";\n\ninterface Props {\n  label: string;\n  value: string | number;\n}\n\nexport const DashboardMetric: React.FC<Props> = ({ label, value }) => (\n  <Card className=\"flex flex-col items-center text-center\">\n    <span className=\"text-2xl font-bold\">{value}</span>\n    <span className=\"text-gray-600\">{label}</span>\n  </Card>\n);\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/shared/StockAlertCard.tsx",
+    "code": "import React from \"react\";\nimport { StockAlert } from \"../../lib/types/Alert\";\nimport { Card } from \"../ui/Card\";\nimport { Button } from \"../ui/Button\";\n\nexport const StockAlertCard: React.FC<{ alert: StockAlert; onRead: () => void }> = ({ alert, onRead }) => (\n  <Card className=\"flex justify-between items-center\">\n    <div>\n      <p className=\"font-semibold\">{alert.message}</p>\n      <small className=\"text-gray-500\">{new Date(alert.createdAt).toLocaleString()}</small>\n    </div>\n    {!alert.read && (\n      <Button variant=\"secondary\" onClick={onRead} className=\"text-sm\">\n        Marcar como leída\n      </Button>\n    )}\n  </Card>\n);\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/shared/ProductForm.tsx",
+    "code": "import React, { useEffect } from \"react\";\nimport { useForm } from \"react-hook-form\";\nimport { Product } from \"../../lib/types/Product\";\nimport { Button } from \"../ui/Button\";\nimport { Input } from \"../ui/Input\";\nimport { Select } from \"../ui/Select\";\n\ninterface Props {\n  initial?: Partial<Product>;\n  onSubmit: (data: Omit<Product, \"id\" | \"createdAt\" | \"updatedAt\">) => void;\n}\n\nexport const ProductForm: React.FC<Props> = ({ initial, onSubmit }) => {\n  const {\n    register,\n    handleSubmit,\n    reset,\n    formState: { errors },\n  } = useForm<Omit<Product, \"id\" | \"createdAt\" | \"updatedAt\">>({\n    defaultValues: {\n      name: \"\",\n      sku: \"\",\n      price: 0,\n      stock: 0,\n      minStock: 0,\n      category: \"General\",\n    },\n  });\n\n  useEffect(() => {\n    if (initial) reset(initial);\n  }, [initial, reset]);\n\n  return (\n    <form onSubmit={handleSubmit(onSubmit)} className=\"space-y-4\">\n      <div>\n        <label className=\"block mb-1 text-sm font-medium\">Nombre</label>\n        <Input {...register(\"name\", { required: true })} />\n        {errors.name && <span className=\"text-red-500 text-sm\">Requerido</span>}\n      </div>\n\n      <div>\n        <label className=\"block mb-1 text-sm font-medium\">SKU</label>\n        <Input {...register(\"sku\", { required: true })} />\n      </div>\n\n      <div className=\"grid grid-cols-2 gap-4\">\n        <div>\n          <label className=\"block mb-1 text-sm font-medium\">Precio</label>\n          <Input type=\"number\" step=\"0.01\" {...register(\"price\", { required: true, min: 0 })} />\n        </div>\n        <div>\n          <label className=\"block mb-1 text-sm font-medium\">Stock Inicial</label>\n          <Input type=\"number\" {...register(\"stock\", { required: true, min: 0 })} />\n        </div>\n      </div>\n\n      <div className=\"grid grid-cols-2 gap-4\">\n        <div>\n          <label className=\"block mb-1 text-sm font-medium\">Stock Mínimo Alerta</label>\n          <Input type=\"number\" {...register(\"minStock\", { required: true, min: 0 })} />\n        </div>\n        <div>\n          <label className=\"block mb-1 text-sm font-medium\">Categoría</label>\n          <Select {...register(\"category\")}> \n            <option value=\"General\">General</option>\n            <option value=\"Bebidas\">Bebidas</option>\n            <option value=\"Alimentos\">Alimentos</option>\n          </Select>\n        </div>\n      </div>\n\n      <Button type=\"submit\">Guardar</Button>\n    </form>\n  );\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/Dashboard.tsx",
+    "code": "import React from \"react\";\nimport { useDashboardMetrics } from \"../hooks/useDashboardMetrics\";\nimport { DashboardMetric } from \"../components/shared/DashboardMetric\";\nimport { useAlerts } from \"../hooks/useAlerts\";\nimport { StockAlertCard } from \"../components/shared/StockAlertCard\";\n\nexport const Dashboard: React.FC = () => {\n  const metrics = useDashboardMetrics();\n  const { alerts, markRead } = useAlerts();\n\n  return (\n    <div className=\"space-y-6\">\n      <h1 className=\"text-2xl font-bold\">Dashboard</h1>\n\n      <section className=\"grid grid-cols-1 sm:grid-cols-3 gap-4\">\n        <DashboardMetric label=\"Productos\" value={metrics.totalProducts} />\n        <DashboardMetric label=\"Valor inventario\" value={metrics.inventoryValueFormatted} />\n        <DashboardMetric label=\"Bajo stock\" value={metrics.lowStock} />\n      </section>\n\n      <section>\n        <h2 className=\"text-xl font-semibold mb-2\">Alertas de Stock</h2>\n        <div className=\"space-y-2\">\n          {alerts.length === 0 && <p className=\"text-sm text-gray-500\">No hay alertas.</p>}\n          {alerts.map((a) => (\n            <StockAlertCard key={a.id} alert={a} onRead={() => markRead(a.id)} />\n          ))}\n        </div>\n      </section>\n    </div>\n  );\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/Products.tsx",
+    "code": "import React, { useState } from \"react\";\nimport { useProducts } from \"../hooks/useProducts\";\nimport { Card } from \"../components/ui/Card\";\nimport { Button } from \"../components/ui/Button\";\nimport { ProductForm } from \"../components/shared/ProductForm\";\nimport { calcStockStatus } from \"../lib/utils/calcStock\";\n\nexport const Products: React.FC = () => {\n  const { products, addProduct } = useProducts();\n  const [showForm, setShowForm] = useState(false);\n\n  return (\n    <div className=\"space-y-6\">\n      <header className=\"flex justify-between items-center\">\n        <h1 className=\"text-2xl font-bold\">Productos</h1>\n        <Button onClick={() => setShowForm((s) => !s)}>\n          {showForm ? \"Cerrar\" : \"Agregar Producto\"}\n        </Button>\n      </header>\n\n      {showForm && (\n        <Card>\n          <ProductForm\n            onSubmit={async (data) => {\n              await addProduct(data);\n              setShowForm(false);\n            }}\n          />\n        </Card>\n      )}\n\n      <section className=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4\">\n        {products.map((p) => {\n          const status = calcStockStatus(p);\n          const statusColor =\n            status === \"low\" ? \"text-yellow-600\" : status === \"out\" ? \"text-red-600\" : \"text-green-600\";\n          return (\n            <Card key={p.id} className=\"space-y-2\">\n              <h3 className=\"font-semibold text-lg flex justify-between\">\n                {p.name} <span className={statusColor}>{p.stock}</span>\n              </h3>\n              <p className=\"text-sm text-gray-500\">SKU: {p.sku}</p>\n              <p className=\"text-sm text-gray-500\">Precio: ${p.price.toFixed(2)}</p>\n            </Card>\n          );\n        })}\n      </section>\n    </div>\n  );\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/Reports.tsx",
+    "code": "import React, { useState } from \"react\";\nimport { reportService } from \"../services/reportService\";\nimport { formatCurrency } from \"../lib/utils/formatCurrency\";\nimport { Card } from \"../components/ui/Card\";\nimport { Button } from \"../components/ui/Button\";\n\nexport const Reports: React.FC = () => {\n  const [month, setMonth] = useState<number>(new Date().getMonth());\n  const [year, setYear] = useState<number>(new Date().getFullYear());\n  const [data, setData] = useState<{ totalFormatted: string } | null>(null);\n  const [loading, setLoading] = useState(false);\n\n  const generate = async () => {\n    setLoading(true);\n    const res = await reportService.monthly(month, year);\n    setData(res);\n    setLoading(false);\n  };\n\n  return (\n    <div className=\"space-y-6 max-w-md\">\n      <h1 className=\"text-2xl font-bold\">Reportes Mensuales</h1>\n\n      <div className=\"flex gap-2\">\n        <select\n          value={month}\n          onChange={(e) => setMonth(Number(e.target.value))}\n          className=\"border rounded px-2 py-1\"\n        >\n          {Array.from({ length: 12 }).map((_, idx) => (\n            <option key={idx} value={idx}>\n              {new Date(0, idx).toLocaleString(\"es-ES\", { month: \"long\" })}\n            </option>\n          ))}\n        </select>\n        <input\n          type=\"number\"\n          value={year}\n          onChange={(e) => setYear(Number(e.target.value))}\n          className=\"border rounded px-2 py-1 w-24\"\n        />\n        <Button onClick={generate} disabled={loading}>\n          {loading ? \"Generando...\" : \"Generar\"}\n        </Button>\n      </div>\n\n      {data && (\n        <Card>\n          <h2 className=\"text-lg font-semibold mb-2\">Resumen</h2>\n          <p>Total ventas: {data.totalFormatted}</p>\n        </Card>\n      )}\n    </div>\n  );\n};\n",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/NotFound.tsx",
+    "code": "import React from \"react\";\nimport { Link } from \"react-router-dom\";\n\nexport const NotFound: React.FC = () => (\n  <div className=\"text-center py-20\">\n    <h1 className=\"text-3xl font-bold mb-4\">404</h1>\n    <p className=\"mb-4\">Página no encontrada</p>\n    <Link to=\"/\" className=\"text-blue-600 underline\">\n      Regresar al inicio\n    </Link>\n  </div>\n);\n",
+    "overwrite": true
+  }
+]

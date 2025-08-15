@@ -4,12 +4,16 @@ import { getWebContainer, acquireWebContainer, releaseWebContainer } from "@/lib
 import { buildFilesForSandpack } from "../../lib/sandpackFiles";
 import { idbGet, idbSet, idbDel } from "@/lib/idb";
 
+import { buildFilesForWebContainerMore } from "@/lib/webcontainerMoreFiles";
+import type { DynamicFileEntry } from "@/lib/webcontainerMoreFiles";
+
 interface WebContainerPreviewProps {
   code: string;
+  extras?: DynamicFileEntry[];
   className?: string;
 }
 
-export function WebContainerPreview({ code, className }: WebContainerPreviewProps) {
+export function WebContainerPreview({ code, extras, className }: WebContainerPreviewProps) {
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
   const [status, setStatus] = React.useState<
     "booting" | "mounting" | "installing" | "starting" | "ready" | "error"
@@ -148,7 +152,9 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
         wcRef.current = wc;
 
         // Construir archivos base y clave del snapshot
-        const files = buildFilesForSandpack(code);
+        const files = extras && extras.length
+          ? buildFilesForWebContainerMore(extras, code)
+          : buildFilesForSandpack(code);
         // Para WebContainers evitamos CSS externo (COEP). Limpiamos el @import remoto si existe.
         const idxCss = files["/src/index.css"];
         if (idxCss) {
@@ -258,7 +264,7 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
       setPreviewUrl(null);
       releaseWebContainer();
     };
-  }, [code, useSnapshot]);
+  }, [code, useSnapshot, extras]);
 
   React.useEffect(() => {
     if (autoScroll && logsRef.current) {
