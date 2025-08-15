@@ -54,46 +54,17 @@ function useLoadCode(projectData: DynamicCodeLoaderProps["projectData"], env: Pr
 function generateFallbackCode(projectData: { name: string; description: string }): string {
   return `export default function ${projectData.name.replace(/[^a-zA-Z0-9]/g, '') || 'MyApp'}() {
   return (
-    <div style={{
-      padding: '2rem',
-      maxWidth: '600px',
-      margin: '0 auto',
-      fontFamily: 'system-ui, sans-serif'
-    }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: 'white',
-        padding: '1.5rem',
-        borderRadius: '12px',
-        marginBottom: '1.5rem'
-      }}>
-        <h1 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 'bold' }}>
-          ${projectData.name}
-        </h1>
+    <div className="min-h-[360px] p-6 max-w-2xl mx-auto font-sans">
+      <div className="rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white p-6 mb-4 shadow">
+        <h1 className="m-0 text-2xl font-bold">${projectData.name}</h1>
       </div>
-      
-      <div style={{
-        background: '#f8f9fa',
-        padding: '1.5rem',
-        borderRadius: '8px',
-        border: '1px solid #e9ecef'
-      }}>
-        <p style={{ color: '#495057', lineHeight: 1.6, margin: 0 }}>
+      <div className="rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+        <p className="text-slate-700 dark:text-slate-300 leading-relaxed m-0">
           ${projectData.description}
         </p>
       </div>
-      
-      <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-        <button style={{
-          background: '#667eea',
-          color: 'white',
-          border: 'none',
-          padding: '0.75rem 1.5rem',
-          borderRadius: '6px',
-          fontSize: '1rem',
-          cursor: 'pointer',
-          transition: 'background 0.2s'
-        }}>
+      <div className="mt-4 text-center">
+        <button className="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400">
           Comenzar
         </button>
       </div>

@@ -58,30 +58,17 @@ function generateFallbackCode(projectData: {
     projectData.name.replace(/[^a-zA-Z0-9]/g, "") || "MyApp"
   }() {
   return (
-    <div style={{
-      padding: '2rem',
-      maxWidth: '600px',
-      margin: '0 auto',
-      fontFamily: 'system-ui, sans-serif'
-    }}>
-      <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 'bold' }}>
-        ${projectData.name}
-      </h1>
-      <p style={{ color: '#374151', lineHeight: 1.6 }}>
-        ${projectData.description}
-      </p>
-      <div style={{ marginTop: '1rem' }}>
-        <button style={{
-          background: '#0ea5e9',
-          color: 'white',
-          border: 'none',
-          padding: '0.6rem 1.2rem',
-          borderRadius: '6px',
-          fontSize: '1rem',
-          cursor: 'pointer'
-        }}>
-          Continuar
-        </button>
+    <div className="min-h-screen p-6 flex items-center justify-center bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+      <div className="w-full max-w-lg rounded-xl border border-gray-200 dark:border-gray-800 bg-white/70 dark:bg-gray-900/70 shadow-sm">
+        <div className="p-6">
+          <h1 className="m-0 text-2xl font-bold">${projectData.name}</h1>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">${projectData.description}</p>
+          <div className="mt-4">
+            <button className="inline-flex items-center rounded-md bg-sky-500 text-white px-4 py-2 text-sm hover:bg-sky-600 transition-colors">
+              Continuar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -8,6 +8,26 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Lightbulb } from "lucide-react"
 
+// Asegura que el Play CDN de Tailwind esté disponible en el documento principal.
+// Desactiva "preflight" para evitar conflictos con el CSS compilado de la app.
+function useTailwindPlayCdn() {
+  React.useEffect(() => {
+    if (typeof document === "undefined") return
+    const hasCdn = !!document.querySelector('script[data-tw-play-cdn]')
+    if (hasCdn) return
+    // Config debe definirse antes de cargar el CDN
+    const cfg = document.createElement('script')
+    cfg.setAttribute('data-tw-play-config', '')
+    cfg.text = `try{window.tailwind=window.tailwind||{};window.tailwind.config={darkMode:'class',corePlugins:{preflight:false}}}catch(e){}`
+    document.head.appendChild(cfg)
+    const cdn = document.createElement('script')
+    cdn.src = 'https://cdn.tailwindcss.com'
+    cdn.async = true
+    cdn.setAttribute('data-tw-play-cdn', '')
+    document.head.appendChild(cdn)
+  }, [])
+}
+
 // Prepara código para react-live (noInline):
 // - Elimina imports
 // - Convierte export default function/class a declaración simple
@@ -48,6 +68,8 @@ function prepareLiveCode(input: string): string {
 }
 
 export function ReactLivePreview({ code }: { code: string }) {
+  // Garantiza que Tailwind esté disponible para clases arbitrarias del live code
+  useTailwindPlayCdn()
   const scope = {
     React,
     useState: React.useState,

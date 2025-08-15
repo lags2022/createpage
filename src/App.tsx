@@ -362,13 +362,23 @@ function AppContent() {
                   return (
                     <div className="space-y-3">
                       <SandpackProvider
-                        template="react"
+                        template="react-ts"
                         files={files}
+                        customSetup={{
+                          dependencies: {
+                            react: "^18.2.0",
+                            "react-dom": "^18.2.0",
+                            "react-router-dom": "^6.23.1",
+                            clsx: "^2.1.1",
+                            "tailwind-merge": "^2.3.0",
+                            "lucide-react": "^0.379.0",
+                          },
+                        }}
                         theme={sandpackTheme}
                         options={{
                           externalResources: [],
                           bundlerURL: undefined,
-                          activeFile: "/App.jsx",
+                          activeFile: "/src/App.tsx",
                         }}
                       >
                         <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden">

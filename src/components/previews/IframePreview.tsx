@@ -10,6 +10,22 @@ function prepareIframeCode(input: string): string {
   // Remover imports en cualquier lugar
   processed = processed.replace(/^\s*import[^;]*;\s*$/gm, "")
 
+  // Quitar anotaciones genéricas en hooks (p.ej., useState<User[]>) que pueden
+  // generar ambigüedad JSX en Babel Standalone.
+  const stripHookGenerics = (src: string) => {
+    const hooks = ["useState", "useRef", "useMemo", "useCallback", "useReducer"]
+    for (const h of hooks) {
+      // useState<T>
+      src = src.replace(new RegExp(`\\b${h}\\s*<[^>]*>`, "g"), h)
+      // React.useState<T>
+      src = src.replace(new RegExp(`\\bReact\\.${h}\\s*<[^>]*>`, "g"), `React.${h}`)
+    }
+    // React.FC<Props> -> any
+    src = src.replace(/\bReact\.FC\s*<[^>]*>/g, "any")
+    return src
+  }
+  processed = stripHookGenerics(processed)
+
   // export default function Nombre() {...}
   const funcMatch = processed.match(/export\s+default\s+function\s+([A-Za-z0-9_]+)/)
   let root = "Component"
@@ -55,6 +71,12 @@ export function IframePreview({ code, className, title = "Vista previa" }: Ifram
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Tailwind Play CDN para estilos dentro del iframe -->
+    <script>
+      // Configuración mínima: usar darkMode por clase (debe declararse antes de cargar el CDN)
+      try { window.tailwind = window.tailwind || {}; window.tailwind.config = { darkMode: 'class' } } catch (e) { /* no-op */ }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
       html, body, #root { height: 100%; margin: 0; }
       body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif; }
@@ -63,6 +85,24 @@ export function IframePreview({ code, className, title = "Vista previa" }: Ifram
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Sincronizar modo oscuro del documento padre (si existe)
+      try {
+        const updateDark = () => {
+          const isDark = window.parent && window.parent.document && window.parent.document.documentElement.classList.contains('dark');
+          document.documentElement.classList.toggle('dark', !!isDark);
+        };
+        updateDark();
+        const obs = new MutationObserver(updateDark);
+        if (window.parent && window.parent.document) {
+          obs.observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        }
+        // Fallback/adicional: seguir el esquema de color del SO
+        const mql = window.matchMedia('(prefers-color-scheme: dark)');
+        document.documentElement.classList.toggle('dark', mql.matches);
+        mql.addEventListener('change', (e) => document.documentElement.classList.toggle('dark', e.matches));
+      } catch (e) { /* no-op sandbox */ }
+    </script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -92,7 +132,7 @@ ${prepared
     <div className={className}>
       <iframe
         title={title}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+        sandbox="allow-scripts allow-forms allow-modals"
         srcDoc={srcDoc}
         style={{ width: "100%", height: "100%", border: "0", background: "transparent" }}
       />
