@@ -2,6 +2,7 @@ import * as React from "react";
 import type { WebContainer, WebContainerProcess, FileSystemTree } from "@webcontainer/api";
 import { getWebContainer, acquireWebContainer, releaseWebContainer } from "@/lib/webcontainerManager";
 import { buildFilesForSandpack } from "../../lib/sandpackFiles";
+import { idbGet, idbSet, idbDel } from "@/lib/idb";
 
 interface WebContainerPreviewProps {
   code: string;
@@ -25,6 +26,11 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
   const [serverPort, setServerPort] = React.useState<number | null>(null);
   const [routePath, setRoutePath] = React.useState<string>("/");
   const [pendingPath, setPendingPath] = React.useState<string>("/");
+  const [useSnapshot, setUseSnapshot] = React.useState(true);
+  const [snapshotUsed, setSnapshotUsed] = React.useState(false);
+  const [cacheKey, setCacheKey] = React.useState<string | null>(null);
+  const [bootStartAt, setBootStartAt] = React.useState<number | null>(null);
+  const [elapsedTotal, setElapsedTotal] = React.useState<number>(0);
 
   function cleanLog(input: string): string {
     // Elimina códigos ANSI y normaliza saltos de línea (usar \u001B para evitar control chars en el código fuente)
@@ -46,6 +52,27 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
       return baseUrl;
     }
   }
+
+  // Hash simple y determinista para claves de snapshot
+  function djb2Hash(str: string): string {
+    let h = 5381 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (((h << 5) + h) ^ str.charCodeAt(i)) >>> 0;
+    }
+    return (h >>> 0).toString(16);
+  }
+
+  React.useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (bootStartAt !== null && status !== "ready" && status !== "error") {
+      interval = setInterval(() => {
+        setElapsedTotal(Math.floor((Date.now() - bootStartAt) / 1000));
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [bootStartAt, status]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -111,6 +138,8 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
       try {
         setStatus("booting");
         setError(null);
+        setBootStartAt(Date.now());
+        setElapsedTotal(0);
         await ensureCOI();
         // Gestiona instancia única de WebContainer
         acquireWebContainer();
@@ -118,7 +147,7 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
         if (cancelled) return;
         wcRef.current = wc;
 
-        setStatus("mounting");
+        // Construir archivos base y clave del snapshot
         const files = buildFilesForSandpack(code);
         // Para WebContainers evitamos CSS externo (COEP). Limpiamos el @import remoto si existe.
         const idxCss = files["/src/index.css"];
@@ -130,16 +159,49 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
           files["/src/index.css"] = { code: cleaned };
         }
         const fsTree = toFsTree(files);
-        await wc.mount(fsTree);
-        if (cancelled) return;
+        const signatureSource = files["/package.json"]?.code ?? "";
+        const key = `wc:snap:${djb2Hash(signatureSource)}`;
+        setCacheKey(key);
 
-        setStatus("installing");
-        const install = await wc.spawn("npm", ["install"]);
-        streamOutput(install);
-        const installExitCode = await install.exit;
+        setStatus("mounting");
+        let usedSnap = false;
+        if (useSnapshot) {
+          try {
+            const snap = await idbGet<FileSystemTree>(key);
+            if (snap) {
+              await wc.mount(snap);
+              usedSnap = true;
+            } else {
+              await wc.mount(fsTree);
+            }
+          } catch {
+            await wc.mount(fsTree);
+          }
+        } else {
+          await wc.mount(fsTree);
+        }
         if (cancelled) return;
-        if (installExitCode !== 0) {
-          throw new Error("npm install falló dentro de WebContainer");
+        setSnapshotUsed(usedSnap);
+
+        if (!usedSnap) {
+          setStatus("installing");
+          const install = await wc.spawn("npm", ["install"]);
+          streamOutput(install);
+          const installExitCode = await install.exit;
+          if (cancelled) return;
+          if (installExitCode !== 0) {
+            throw new Error("npm install falló dentro de WebContainer");
+          }
+        }
+
+        // Asegurar que el código fuente actual se aplique (por si el snapshot existe pero el código cambió)
+        try {
+          await wc.fs.writeFile("/src/App.tsx", files["/src/App.tsx"].code);
+          if (files["/src/index.css"]) {
+            await wc.fs.writeFile("/src/index.css", files["/src/index.css"].code);
+          }
+        } catch (e) {
+          console.debug("No se pudo aplicar parches de código", e);
         }
 
         setStatus("starting");
@@ -147,9 +209,22 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
           if (cancelled) return;
           setPreviewUrl(url);
           setServerPort(_port);
-          setRoutePath("/");
-          setPendingPath("/");
+          // Mantener ruta previa (persistida)
+          // setRoutePath("/");
+          // setPendingPath("/");
           setStatus("ready");
+          setBootStartAt(null); // detener timer
+          // Guardar snapshot en segundo plano
+          if (useSnapshot) {
+            void (async () => {
+              try {
+                const snap = await wc.export("json");
+                await idbSet(key, snap as unknown as FileSystemTree);
+              } catch (e) {
+                console.debug("No se pudo exportar snapshot", e);
+              }
+            })();
+          }
         });
 
         const dev = await wc.spawn("npm", ["run", "dev"]);
@@ -183,7 +258,7 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
       setPreviewUrl(null);
       releaseWebContainer();
     };
-  }, [code]);
+  }, [code, useSnapshot]);
 
   React.useEffect(() => {
     if (autoScroll && logsRef.current) {
@@ -204,11 +279,34 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
     }
   }, [status, previewUrl, routePath]);
 
+  // Persistir ruta del preview en localStorage
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("wc:route");
+      if (saved) {
+        const normalized = normalizeRoutePath(saved);
+        setRoutePath(normalized);
+        setPendingPath(normalized);
+      }
+    } catch {
+      // noop
+    }
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem("wc:route", routePath);
+    } catch {
+      // noop
+    }
+  }, [routePath]);
+
   const currentStep =
     status === "booting" ? 0 :
     status === "mounting" ? 1 :
     status === "installing" ? 2 :
-    status === "starting" ? 3 : 4;
+    status === "starting" ? 3 :
+    4;
 
   const fullUrl = previewUrl ? makeFullUrl(previewUrl, routePath) : null;
 
@@ -216,23 +314,23 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
     <div className={`flex flex-col h-full ${className ?? ""}`}>
       <div className="p-4 mx-auto w-full">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {["Arrancando", "Montando FS", "Instalando deps", "Levantando server", "Listo"].map((label, idx) => (
+          {[
+            "Arrancando",
+            "Montando FS",
+            useSnapshot ? "Retomando imagen" : "Instalando deps",
+            "Levantando server",
+            "Listo",
+          ].map((label, idx) => (
             <span
-              key={label}
+              key={`${label}-${idx}`}
               className={`px-2 py-[2px] rounded border ${idx <= currentStep ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-border/60"}`}
             >
               {label}
+              {idx === currentStep && status !== "ready" && status !== "error" && elapsedTotal > 0 && (
+                <span className="ml-1 text-xs opacity-75">({elapsedTotal}s)</span>
+              )}
             </span>
           ))}
-          <span className="ml-auto">
-            {fullUrl ? (
-              <>
-                URL: <a href={fullUrl} target="_blank" rel="noreferrer" className="underline">{fullUrl}</a>
-              </>
-            ) : (
-              "Preparando vista previa..."
-            )}
-          </span>
         </div>
 
         {/* Barra de dirección */}
@@ -240,41 +338,41 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
           <span className="text-xs text-muted-foreground">Ruta</span>
           <input
             aria-label="Ruta del preview"
-            className="flex-1 max-w-sm px-2 py-1 rounded border border-border/60 bg-background"
-            placeholder="/"
-            value={pendingPath}
-            onChange={(e) => setPendingPath(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") setRoutePath(normalizeRoutePath(pendingPath));
-            }}
-            disabled={!previewUrl}
-          />
-          <button
-            type="button"
-            className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted text-xs"
-            onClick={() => setRoutePath(normalizeRoutePath(pendingPath))}
-            disabled={!previewUrl}
-          >
-            Ir
-          </button>
-          <button
-            type="button"
-            className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted text-xs"
-            onClick={() => {
-              if (iframeRef.current && fullUrl) {
-                const u = new URL(fullUrl);
-                u.searchParams.set("_ts", Date.now().toString());
-                iframeRef.current.src = u.toString();
-              }
-            }}
-            disabled={!previewUrl}
-          >
-            Recargar
-          </button>
-          {serverPort !== null && (
-            <span className="ml-auto text-xs text-muted-foreground">puerto: {serverPort}</span>
-          )}
-        </div>
+          className="flex-1 max-w-sm px-2 py-1 rounded border border-border/60 bg-background"
+          placeholder="/"
+          value={pendingPath}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPendingPath(e.target.value)}
+          onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+            if (e.key === "Enter") setRoutePath(normalizeRoutePath(pendingPath));
+          }}
+          disabled={!previewUrl}
+        />
+        <button
+          type="button"
+          className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
+          onClick={() => setRoutePath(normalizeRoutePath(pendingPath))}
+          disabled={!previewUrl}
+        >
+          Ir
+        </button>
+        <button
+          type="button"
+          className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
+          onClick={() => {
+            if (iframeRef.current && fullUrl) {
+              const u = new URL(fullUrl);
+              u.searchParams.set("_ts", Date.now().toString());
+              iframeRef.current.src = u.toString();
+            }
+          }}
+          disabled={!previewUrl}
+        >
+          Recargar
+        </button>
+        {serverPort !== null && (
+          <span className="ml-auto text-xs text-muted-foreground">puerto: {serverPort}</span>
+        )}
+      </div>
 
         <div className="rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[60vh] min-h-[360px]">
           {status === "ready" ? (
@@ -284,8 +382,8 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
               <div>
                 <div className="mb-1 font-medium">
                   {status === "booting" && "Inicializando WebContainers..."}
-                  {status === "mounting" && "Montando sistema de archivos..."}
-                  {status === "installing" && "Instalando dependencias (npm install)..."}
+                  {status === "mounting" && (snapshotUsed ? "Retomando imagen desde caché..." : (useSnapshot ? "Buscando imagen en caché..." : "Montando sistema de archivos..."))}
+                  {status === "installing" && (snapshotUsed ? "Aplicando cambios..." : "Instalando dependencias (npm install)...")}
                   {status === "starting" && "Iniciando Vite (npm run dev)..."}
                   {status === "error" && "Ocurrió un error"}
                 </div>
@@ -293,9 +391,16 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
                   <div className="text-destructive">{error}</div>
                 ) : (
                   <div className="text-xs opacity-80">
-                    {status === "installing"
+                    {status === "installing" && !snapshotUsed
                       ? "La primera vez puede tardar 20–60s."
+                      : useSnapshot
+                      ? "Mucho más rápido con snapshot."
                       : "Esto tomará solo unos segundos."}
+                    {elapsedTotal > 0 && (
+                      <div className="mt-1 text-primary font-mono">
+                        Tiempo transcurrido: {elapsedTotal}s
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -325,6 +430,28 @@ export function WebContainerPreview({ code, className }: WebContainerPreviewProp
           >
             Limpiar logs
           </button>
+          <label className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted cursor-pointer flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={useSnapshot}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseSnapshot(e.target.checked)}
+            />
+            Usar snapshot
+          </label>
+          <button
+            type="button"
+            className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
+            onClick={async () => {
+              if (cacheKey) {
+                try { await idbDel(cacheKey); } catch (e) { console.debug("No se pudo borrar caché", e); }
+              }
+            }}
+          >
+            Borrar caché
+          </button>
+          {snapshotUsed && (
+            <span className="text-muted-foreground">snapshot en uso</span>
+          )}
           {fullUrl && (
             <>
               <button

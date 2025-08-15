@@ -1,0 +1,137 @@
+[
+  {
+    "path": "src/lib/types.ts",
+    "code": "export interface User { id: string; name: string; email: string; token: string; }\nexport interface Room { id: string; title: string; price: number; img: string; description?: string; }\nexport interface Reservation { id: string; roomId: string; userId: string; from: string; to: string; }",
+    "overwrite": true
+  },
+  {
+    "path": "src/lib/api.ts",
+    "code": "import { User } from './types';\nconst API = 'https://api.minibnb.local';\nexport async function api<T>(endpoint: string, options: RequestInit = {}): Promise<T> {\n  const user: User | null = JSON.parse(localStorage.getItem('user') || 'null');\n  const res = await fetch(`${API}${endpoint}`, {\n    headers: {\n      'Content-Type': 'application/json',\n      ...(user?.token ? { Authorization: `Bearer ${user.token}` } : {}),\n      ...(options.headers || {})\n    },\n    ...options\n  });\n  if (!res.ok) throw new Error(await res.text());\n  return res.json();\n}",
+    "overwrite": true
+  },
+  {
+    "path": "src/services/auth.ts",
+    "code": "import { api } from '../lib/api';\nimport { User } from '../lib/types';\nexport const auth = {\n  login: (email: string, password: string) => api<User>('/login', { method: 'POST', body: JSON.stringify({ email, password }) }),\n  register: (name: string, email: string, password: string) => api<User>('/register', { method: 'POST', body: JSON.stringify({ name, email, password }) })\n};",
+    "overwrite": true
+  },
+  {
+    "path": "src/services/rooms.ts",
+    "code": "import { api } from '../lib/api';\nimport { Room } from '../lib/types';\nexport const rooms = { list: () => api<Room[]>('/rooms'), detail: (id: string) => api<Room>(`/rooms/${id}`) };",
+    "overwrite": true
+  },
+  {
+    "path": "src/services/reservations.ts",
+    "code": "import { api } from '../lib/api';\nimport { Reservation } from '../lib/types';\nexport const reservations = {\n  byUser: (userId: string) => api<Reservation[]>(`/users/${userId}/reservations`),\n  create: (payload: Omit<Reservation, 'id'>) => api<Reservation>('/reservations', { method: 'POST', body: JSON.stringify(payload) })\n};",
+    "overwrite": true
+  },
+  {
+    "path": "src/contexts/AuthContext.tsx",
+    "code": "import { createContext, useState, FC, ReactNode } from 'react';\nimport { User } from '../lib/types';\ninterface Ctx { user: User | null; login: (u: User) => void; logout: () => void; }\nexport const AuthContext = createContext<Ctx>({} as Ctx);\nexport const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {\n  const [user, setUser] = useState<User | null>(() => JSON.parse(localStorage.getItem('user') || 'null'));\n  const login = (u: User) => { setUser(u); localStorage.setItem('user', JSON.stringify(u)); };\n  const logout = () => { setUser(null); localStorage.removeItem('user'); };\n  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;\n};",
+    "overwrite": true
+  },
+  {
+    "path": "src/contexts/RoomsContext.tsx",
+    "code": "import { createContext, useEffect, useState, FC, ReactNode } from 'react';\nimport { Room } from '../lib/types';\nimport { rooms } from '../services/rooms';\ninterface Ctx { rooms: Room[]; loading: boolean; refresh: () => void; }\nexport const RoomsContext = createContext<Ctx>({} as Ctx);\nexport const RoomsProvider: FC<{ children: ReactNode }> = ({ children }) => {\n  const [roomsList, setRooms] = useState<Room[]>([]);\n  const [loading, setLoading] = useState(true);\n  const fetchRooms = () => { setLoading(true); rooms.list().then(setRooms).finally(() => setLoading(false)); };\n  useEffect(fetchRooms, []);\n  return <RoomsContext.Provider value={{ rooms: roomsList, loading, refresh: fetchRooms }}>{children}</RoomsContext.Provider>;\n};",
+    "overwrite": true
+  },
+  {
+    "path": "src/contexts/ReservationsContext.tsx",
+    "code": "import { createContext, useEffect, useState, FC, ReactNode } from 'react';\nimport { Reservation } from '../lib/types';\nimport { reservations } from '../services/reservations';\nimport { useAuth } from '../hooks/useAuth';\ninterface Ctx { list: Reservation[]; add: (r: Reservation) => void; refresh: () => void; }\nexport const ReservationsContext = createContext<Ctx>({} as Ctx);\nexport const ReservationsProvider: FC<{ children: ReactNode }> = ({ children }) => {\n  const { user } = useAuth();\n  const [list, setList] = useState<Reservation[]>([]);\n  const refresh = () => user && reservations.byUser(user.id).then(setList);\n  const add = (r: Reservation) => setList(prev => [...prev, r]);\n  useEffect(refresh, [user]);\n  return <ReservationsContext.Provider value={{ list, add, refresh }}>{children}</ReservationsContext.Provider>;\n};",
+    "overwrite": true
+  },
+  {
+    "path": "src/hooks/useAuth.ts",
+    "code": "import { useContext } from 'react';\nimport { AuthContext } from '../contexts/AuthContext';\nexport const useAuth = () => useContext(AuthContext);",
+    "overwrite": true
+  },
+  {
+    "path": "src/hooks/useRooms.ts",
+    "code": "import { useContext } from 'react';\nimport { RoomsContext } from '../contexts/RoomsContext';\nexport const useRooms = () => useContext(RoomsContext);",
+    "overwrite": true
+  },
+  {
+    "path": "src/hooks/useReservations.ts",
+    "code": "import { useContext } from 'react';\nimport { ReservationsContext } from '../contexts/ReservationsContext';\nexport const useReservations = () => useContext(ReservationsContext);",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/ui/Button.tsx",
+    "code": "import { ButtonHTMLAttributes, FC } from 'react';\nexport const Button: FC<ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, className='', ...props }) => (\n  <button className={`bg-blue-600 hover:bg-blue-700 text-white rounded px-4 py-2 transition ${className}`} {...props}>{children}</button>\n);",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/ui/Input.tsx",
+    "code": "import { FC, InputHTMLAttributes } from 'react';\nexport const Input: FC<InputHTMLAttributes<HTMLInputElement>> = ({ className='', ...props }) => (\n  <input className={`border rounded px-3 py-2 w-full focus:outline-none focus:ring focus:border-blue-400 ${className}`} {...props} />\n);",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/ui/Card.tsx",
+    "code": "import { FC, ReactNode } from 'react';\nexport const Card: FC<{ children: ReactNode; className?: string }> = ({ children, className='' }) => <div className={`bg-white shadow rounded p-4 ${className}`}>{children}</div>; ",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/layout/Header.tsx",
+    "code": "import { Link } from 'react-router-dom';\nimport { useAuth } from '../../hooks/useAuth';\nexport const Header = () => {\n  const { user, logout } = useAuth();\n  return (\n    <header className='bg-white shadow-sm'>\n      <div className='container mx-auto p-4 flex justify-between'>\n        <Link to='/' className='font-bold text-xl'>MiniBnB</Link>\n        <nav className='flex gap-4 items-center'>\n          {user ? (\n            <>\n              <Link to='/reservations' className='hover:underline'>Mis reservas</Link>\n              <button onClick={logout} className='hover:underline'>Salir</button>\n            </>\n          ) : (\n            <>\n              <Link to='/login' className='hover:underline'>Login</Link>\n              <Link to='/register' className='hover:underline'>Registro</Link>\n            </>\n          )}\n        </nav>\n      </div>\n    </header>\n  );\n};",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/layout/Footer.tsx",
+    "code": "export const Footer = () => <footer className='text-center py-6'>© {new Date().getFullYear()} MiniBnB</footer>;",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/layout/MainLayout.tsx",
+    "code": "import { FC, ReactNode } from 'react';\nimport { Header } from './Header';\nimport { Footer } from './Footer';\nexport const MainLayout: FC<{ children: ReactNode }> = ({ children }) => (\n  <div className='flex flex-col min-h-screen bg-gray-50'>\n    <Header />\n    <main className='flex-1 container mx-auto p-4'>{children}</main>\n    <Footer />\n  </div>\n);",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/shared/RoomCard.tsx",
+    "code": "import { FC } from 'react';\nimport { Card } from '../ui/Card';\nimport { Room } from '../../lib/types';\nimport { Link } from 'react-router-dom';\nexport const RoomCard: FC<{ room: Room }> = ({ room }) => (\n  <Card>\n    <img src={room.img} alt={room.title} className='w-full h-40 object-cover rounded mb-2'/>\n    <h3 className='font-semibold'>{room.title}</h3>\n    <p className='text-sm mb-2'>${room.price}/noche</p>\n    <Link to={`/rooms/${room.id}`} className='text-blue-600 hover:underline text-sm'>Ver detalle</Link>\n  </Card>\n);",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/shared/ReservationCard.tsx",
+    "code": "import { FC } from 'react';\nimport { Card } from '../ui/Card';\nimport { Reservation, Room } from '../../lib/types';\ninterface Props { reservation: Reservation; room: Room; }\nexport const ReservationCard: FC<Props> = ({ reservation, room }) => (\n  <Card className='flex justify-between'>\n    <div>\n      <h4 className='font-semibold'>{room.title}</h4>\n      <p className='text-xs text-gray-600'>{new Date(reservation.from).toLocaleDateString()} → {new Date(reservation.to).toLocaleDateString()}</p>\n    </div>\n    <span>${room.price}</span>\n  </Card>\n);",
+    "overwrite": true
+  },
+  {
+    "path": "src/components/shared/ProtectedRoute.tsx",
+    "code": "import { Navigate, Outlet } from 'react-router-dom';\nimport { useAuth } from '../../hooks/useAuth';\nexport const ProtectedRoute = () => {\n  const { user } = useAuth();\n  return user ? <Outlet /> : <Navigate to='/login' replace />;\n};",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/Home.tsx",
+    "code": "import { MainLayout } from '../components/layout/MainLayout';\nimport { useRooms } from '../hooks/useRooms';\nimport { RoomCard } from '../components/shared/RoomCard';\nexport default function Home() {\n  const { rooms, loading } = useRooms();\n  return (\n    <MainLayout>\n      <h1 className='text-2xl font-bold mb-4'>Habitaciones disponibles</h1>\n      {loading ? <p>Cargando...</p> : (\n        <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>\n          {rooms.map(r => <RoomCard key={r.id} room={r} />)}\n        </div>\n      )}\n    </MainLayout>\n  );\n}",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/Login.tsx",
+    "code": "import { useState, FormEvent } from 'react';\nimport { MainLayout } from '../components/layout/MainLayout';\nimport { Input } from '../components/ui/Input';\nimport { Button } from '../components/ui/Button';\nimport { auth } from '../services/auth';\nimport { useAuth } from '../hooks/useAuth';\nimport { useNavigate } from 'react-router-dom';\nexport default function Login() {\n  const navigate = useNavigate();\n  const { login } = useAuth();\n  const [email, setEmail] = useState('');\n  const [password, setPassword] = useState('');\n  const [error, setError] = useState('');\n  const handleSubmit = async (e: FormEvent) => {\n    e.preventDefault();\n    try { const user = await auth.login(email, password); login(user); navigate('/'); } catch (err: any) { setError(err.message); }\n  };\n  return (\n    <MainLayout>\n      <h1 className='text-2xl font-bold mb-4'>Iniciar sesión</h1>\n      <form onSubmit={handleSubmit} className='max-w-sm space-y-4'>\n        <Input placeholder='Email' value={email} onChange={e=>setEmail(e.target.value)} />\n        <Input type='password' placeholder='Contraseña' value={password} onChange={e=>setPassword(e.target.value)} />\n        {error && <p className='text-red-600 text-sm'>{error}</p>}\n        <Button type='submit' className='w-full'>Entrar</Button>\n      </form>\n    </MainLayout>\n  );\n}",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/Register.tsx",
+    "code": "import { useState, FormEvent } from 'react';\nimport { MainLayout } from '../components/layout/MainLayout';\nimport { Input } from '../components/ui/Input';\nimport { Button } from '../components/ui/Button';\nimport { auth } from '../services/auth';\nimport { useAuth } from '../hooks/useAuth';\nimport { useNavigate } from 'react-router-dom';\nexport default function Register() {\n  const navigate = useNavigate();\n  const { login } = useAuth();\n  const [name, setName] = useState('');\n  const [email, setEmail] = useState('');\n  const [password, setPassword] = useState('');\n  const [error, setError] = useState('');\n  const handleSubmit = async (e: FormEvent) => {\n    e.preventDefault();\n    try { const user = await auth.register(name, email, password); login(user); navigate('/'); } catch (err: any) { setError(err.message); }\n  };\n  return (\n    <MainLayout>\n      <h1 className='text-2xl font-bold mb-4'>Registro</h1>\n      <form onSubmit={handleSubmit} className='max-w-sm space-y-4'>\n        <Input placeholder='Nombre' value={name} onChange={e=>setName(e.target.value)} />\n        <Input placeholder='Email' value={email} onChange={e=>setEmail(e.target.value)} />\n        <Input type='password' placeholder='Contraseña' value={password} onChange={e=>setPassword(e.target.value)} />\n        {error && <p className='text-red-600 text-sm'>{error}</p>}\n        <Button type='submit' className='w-full'>Crear cuenta</Button>\n      </form>\n    </MainLayout>\n  );\n}",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/RoomDetail.tsx",
+    "code": "import { useEffect, useState } from 'react';\nimport { useParams, useNavigate } from 'react-router-dom';\nimport { MainLayout } from '../components/layout/MainLayout';\nimport { Room } from '../lib/types';\nimport { rooms } from '../services/rooms';\nimport { Button } from '../components/ui/Button';\nimport { useAuth } from '../hooks/useAuth';\nimport { reservations } from '../services/reservations';\nimport { useReservations } from '../hooks/useReservations';\nexport default function RoomDetail() {\n  const { id } = useParams();\n  const navigate = useNavigate();\n  const { user } = useAuth();\n  const { add } = useReservations();\n  const [room, setRoom] = useState<Room | null>(null);\n  const [loading, setLoading] = useState(true);\n  useEffect(()=>{ rooms.detail(id!).then(r=>{ setRoom(r); setLoading(false); }); },[id]);\n  const reserve = async () => {\n    if(!user) return navigate('/login');\n    const now = new Date().toISOString();\n    const res = await reservations.create({ roomId:id!, userId:user.id, from: now, to: now });\n    add(res); navigate('/reservations');\n  };\n  if(loading) return <MainLayout>Cargando...</MainLayout>;\n  if(!room) return <MainLayout>No encontrado</MainLayout>;\n  return (\n    <MainLayout>\n      <img src={room.img} alt={room.title} className='w-full h-60 object-cover rounded mb-4'/>\n      <h1 className='text-2xl font-bold mb-2'>{room.title}</h1>\n      <p className='mb-4'>{room.description || 'Sin descripción.'}</p>\n      <p className='font-semibold mb-6'>${room.price} / noche</p>\n      <Button onClick={reserve}>Reservar</Button>\n    </MainLayout>\n  );\n}",
+    "overwrite": true
+  },
+  {
+    "path": "src/pages/Reservations.tsx",
+    "code": "import { MainLayout } from '../components/layout/MainLayout';\nimport { useReservations } from '../hooks/useReservations';\nimport { useRooms } from '../hooks/useRooms';\nimport { ReservationCard } from '../components/shared/ReservationCard';\nexport default function Reservations() {\n  const { list } = useReservations();\n  const { rooms } = useRooms();\n  const findRoom = (id: string) => rooms.find(r=>r.id===id)!;\n  return (\n    <MainLayout>\n      <h1 className='text-2xl font-bold mb-4'>Mis reservas</h1>\n      {list.length===0 ? <p>No tienes reservas.</p> : (\n        <div className='space-y-4'>\n          {list.map(r => <ReservationCard key={r.id} reservation={r} room={findRoom(r.roomId)} />)}\n        </div>\n      )}\n    </MainLayout>\n  );\n}",
+    "overwrite": true
+  },
+  {
+    "path": "src/App.tsx",
+    "code": "import { BrowserRouter, Routes, Route } from 'react-router-dom';\nimport Home from './pages/Home';\nimport Login from './pages/Login';\nimport Register from './pages/Register';\nimport RoomDetail from './pages/RoomDetail';\nimport Reservations from './pages/Reservations';\nimport { AuthProvider } from './contexts/AuthContext';\nimport { RoomsProvider } from './contexts/RoomsContext';\nimport { ReservationsProvider } from './contexts/ReservationsContext';\nimport { ProtectedRoute } from './components/shared/ProtectedRoute';\nexport default function App(){\n  return(\n    <AuthProvider>\n      <RoomsProvider>\n        <ReservationsProvider>\n          <BrowserRouter>\n            <Routes>\n              <Route path='/' element={<Home/>}/>\n              <Route path='/login' element={<Login/>}/>\n              <Route path='/register' element={<Register/>}/>\n              <Route path='/rooms/:id' element={<RoomDetail/>}/>\n              <Route element={<ProtectedRoute/>}>\n                <Route path='/reservations' element={<Reservations/>}/>\n              </Route>\n            </Routes>\n          </BrowserRouter>\n        </ReservationsProvider>\n      </RoomsProvider>\n    </AuthProvider>\n  );\n}",
+    "overwrite": true
+  },
+  {
+    "path": "src/main.tsx",
+    "code": "import React from 'react';\nimport { createRoot } from 'react-dom/client';\nimport App from './App';\nimport './index.css';\ncreateRoot(document.getElementById('root') as HTMLElement).render(<React.StrictMode><App/></React.StrictMode>);",
+    "overwrite": true
+  }
+]

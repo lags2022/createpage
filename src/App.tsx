@@ -60,13 +60,17 @@ function AppContent() {
   // Entorno de datos (mock / n8n)
   const [previewEnv, setPreviewEnv] = useState<PreviewEnv>(DEFAULT_PREVIEW_ENV);
   // Estados por modo: generación y código cargado
-  const [isGeneratingByMode, setIsGeneratingByMode] = useState<Record<PreviewMode, boolean>>({
+  const [isGeneratingByMode, setIsGeneratingByMode] = useState<
+    Record<PreviewMode, boolean>
+  >({
     "react-live": false,
     iframe: false,
     sandpack: false,
     webcontainer: false,
   });
-  const [loadedCodeByMode, setLoadedCodeByMode] = useState<Record<PreviewMode, { code: string; filename: string } | null>>({
+  const [loadedCodeByMode, setLoadedCodeByMode] = useState<
+    Record<PreviewMode, { code: string; filename: string } | null>
+  >({
     "react-live": null,
     iframe: null,
     sandpack: null,
@@ -80,10 +84,10 @@ function AppContent() {
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!canContinue) return;
-    
+
     // Cerrar sidebar en responsive al presionar Continuar
     setOpenMobile(false);
-    
+
     // Activar generación solo para el modo actual y limpiar solo ese modo
     setIsGeneratingByMode((prev) => ({ ...prev, [previewMode]: true }));
     setLoadedCodeByMode((prev) => ({ ...prev, [previewMode]: null }));
@@ -110,10 +114,11 @@ function AppContent() {
   };
 
   // Manejar cuando se carga código dinámicamente
-  const handleCodeLoadedForMode = (mode: PreviewMode) => (code: string, filename: string) => {
-    setLoadedCodeByMode((prev) => ({ ...prev, [mode]: { code, filename } }));
-    setIsGeneratingByMode((prev) => ({ ...prev, [mode]: false }));
-  };
+  const handleCodeLoadedForMode =
+    (mode: PreviewMode) => (code: string, filename: string) => {
+      setLoadedCodeByMode((prev) => ({ ...prev, [mode]: { code, filename } }));
+      setIsGeneratingByMode((prev) => ({ ...prev, [mode]: false }));
+    };
 
   // Derivados por modo actual
   const isGenerating = isGeneratingByMode[previewMode];
@@ -151,7 +156,9 @@ function AppContent() {
                     id="projectName"
                     placeholder="ej. MiApp Revolucionaria"
                     value={projectName}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProjectName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setProjectName(e.target.value)
+                    }
                     aria-invalid={
                       projectName.trim().length > 0 &&
                       projectName.trim().length <= 2
@@ -171,7 +178,9 @@ function AppContent() {
                     id="oneLiner"
                     placeholder="ej. Una app que conecta a dueños de mascotas con veterinarios para consultas virtuales las 24 horas"
                     value={oneLiner}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setOneLiner(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                      setOneLiner(e.target.value)
+                    }
                     aria-invalid={tooLong}
                     aria-describedby="oneLinerHelp oneLinerCount"
                     className="min-h-[96px]"
@@ -196,9 +205,9 @@ function AppContent() {
                   <Label htmlFor="previewMode">Modo de previsualización</Label>
                   <Select
                     value={previewMode}
-                    onValueChange={(v: "react-live" | "iframe" | "sandpack" | "webcontainer") =>
-                      setPreviewMode(v)
-                    }
+                    onValueChange={(
+                      v: "react-live" | "iframe" | "sandpack" | "webcontainer"
+                    ) => setPreviewMode(v)}
                   >
                     <SelectTrigger
                       id="previewMode"
@@ -207,10 +216,10 @@ function AppContent() {
                       <SelectValue placeholder="react-live" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="react-live">react-live</SelectItem>
-                      <SelectItem value="iframe">iframe</SelectItem>
-                      <SelectItem value="sandpack">sandpack</SelectItem>
                       <SelectItem value="webcontainer">webcontainer</SelectItem>
+                      <SelectItem value="react-live">react-live</SelectItem>
+                      <SelectItem value="sandpack">sandpack</SelectItem>
+                      <SelectItem value="iframe">iframe</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
@@ -235,19 +244,27 @@ function AppContent() {
                     value={previewEnv}
                     onValueChange={(v: PreviewEnv) => setPreviewEnv(v)}
                   >
-                    <SelectTrigger id="previewEnv" aria-label="Entorno de datos">
+                    <SelectTrigger
+                      id="previewEnv"
+                      aria-label="Entorno de datos"
+                    >
                       <SelectValue placeholder="mock-one-component" />
                     </SelectTrigger>
                     <SelectContent>
                       {PREVIEW_ENV_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.id} value={opt.id} disabled={opt.disabled}>
+                        <SelectItem
+                          key={opt.id}
+                          value={opt.id}
+                          disabled={opt.disabled}
+                        >
                           {opt.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Usa mock (1 componente) o n8n (1 componente). "more-components" aún en WIP.
+                    Usa mock (1 componente) o n8n (1 componente).
+                    "more-components" aún en WIP.
                   </p>
                 </div>
               </form>
@@ -270,10 +287,10 @@ function AppContent() {
           <div className="mx-auto grid w-full max-w-full gap-4 min-h-full">
             {previewMode === "react-live" ? (
               isGenerating ? (
-                <DynamicReactLivePreview 
+                <DynamicReactLivePreview
                   projectData={{
                     name: projectName,
-                    description: oneLiner
+                    description: oneLiner,
                   }}
                   env={previewEnv}
                   onCodeLoaded={handleCodeLoadedForMode("react-live")}
@@ -294,7 +311,11 @@ function AppContent() {
                       className="text-primary"
                       disabled={isGenerating}
                     >
-                      <RotateCcw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                      <RotateCcw
+                        className={`size-4 ${
+                          isGenerating ? "animate-spin" : ""
+                        }`}
+                      />
                     </Button>
                   </div>
                   <ReactLivePreview code={loadedCode.code} />
@@ -333,7 +354,11 @@ function AppContent() {
                       className="text-primary"
                       disabled={isGenerating}
                     >
-                      <RotateCcw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                      <RotateCcw
+                        className={`size-4 ${
+                          isGenerating ? "animate-spin" : ""
+                        }`}
+                      />
                     </Button>
                   </div>
                   <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[calc(100vh-200px)]">
@@ -388,7 +413,9 @@ function AppContent() {
                       >
                         <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden">
                           <div className="px-4 py-2 flex items-center justify-between text-xs text-muted-foreground border-b border-border/60 bg-background/80">
-                            <span className="truncate">📄 {loadedCode.filename}</span>
+                            <span className="truncate">
+                              📄 {loadedCode.filename}
+                            </span>
                             <div className="flex items-center gap-1">
                               <Button
                                 type="button"
@@ -400,7 +427,11 @@ function AppContent() {
                                 className="text-primary"
                                 disabled={isGenerating}
                               >
-                                <RotateCcw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                                <RotateCcw
+                                  className={`size-4 ${
+                                    isGenerating ? "animate-spin" : ""
+                                  }`}
+                                />
                               </Button>
                               <SandpackUrlButton />
                             </div>
@@ -445,11 +476,18 @@ function AppContent() {
                       className="text-primary"
                       disabled={isGenerating}
                     >
-                      <RotateCcw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                      <RotateCcw
+                        className={`size-4 ${
+                          isGenerating ? "animate-spin" : ""
+                        }`}
+                      />
                     </Button>
                   </div>
                   <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[calc(100vh-200px)]">
-                    <WebContainerPreview code={loadedCode.code} className="h-full" />
+                    <WebContainerPreview
+                      code={loadedCode.code}
+                      className="h-full"
+                    />
                   </div>
                 </div>
               ) : (
