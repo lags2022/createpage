@@ -27,6 +27,8 @@ import { IframePreview } from "./components/previews/IframePreview";
 import { DynamicIframePreview } from "./components/previews/DynamicIframePreview";
 import { DynamicSandpackPreview } from "./components/previews/DynamicSandpackPreview";
 import { SandpackUrlButton } from "./components/previews/SandpackUrlButton";
+import { WebContainerPreview } from "./components/previews/WebContainerPreview";
+import { DynamicWebContainerPreview } from "./components/previews/DynamicWebContainerPreview";
 import {
   SidebarProvider,
   Sidebar,
@@ -53,7 +55,7 @@ function AppContent() {
   const tooLong = oneLiner.length > maxChars;
   const canContinue =
     projectName.trim().length > 2 && oneLiner.trim().length > 5 && !tooLong;
-  type PreviewMode = "react-live" | "iframe" | "sandpack";
+  type PreviewMode = "react-live" | "iframe" | "sandpack" | "webcontainer";
   const [previewMode, setPreviewMode] = useState<PreviewMode>("react-live");
   // Entorno de datos (mock / n8n)
   const [previewEnv, setPreviewEnv] = useState<PreviewEnv>(DEFAULT_PREVIEW_ENV);
@@ -62,11 +64,13 @@ function AppContent() {
     "react-live": false,
     iframe: false,
     sandpack: false,
+    webcontainer: false,
   });
   const [loadedCodeByMode, setLoadedCodeByMode] = useState<Record<PreviewMode, { code: string; filename: string } | null>>({
     "react-live": null,
     iframe: null,
     sandpack: null,
+    webcontainer: null,
   });
 
   // El cambio de modo ahora lo maneja Radix Select vía onValueChange
@@ -192,7 +196,7 @@ function AppContent() {
                   <Label htmlFor="previewMode">Modo de previsualización</Label>
                   <Select
                     value={previewMode}
-                    onValueChange={(v: "react-live" | "iframe" | "sandpack") =>
+                    onValueChange={(v: "react-live" | "iframe" | "sandpack" | "webcontainer") =>
                       setPreviewMode(v)
                     }
                   >
@@ -206,10 +210,11 @@ function AppContent() {
                       <SelectItem value="react-live">react-live</SelectItem>
                       <SelectItem value="iframe">iframe</SelectItem>
                       <SelectItem value="sandpack">sandpack</SelectItem>
+                      <SelectItem value="webcontainer">webcontainer</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Modos activos: react-live, iframe y sandpack.
+                    Modos activos: react-live, iframe, sandpack y webcontainer.
                   </p>
                 </div>
 
@@ -406,6 +411,47 @@ function AppContent() {
                     </div>
                   );
                 })()
+              ) : (
+                <div className="rounded-xl border border-border/60 p-6 text-sm text-muted-foreground shadow-sm flex items-center justify-center">
+                  <p className="text-center">
+                    Completa el formulario y presiona "Continuar" para ver la
+                    previsualización.
+                  </p>
+                </div>
+              )
+            ) : previewMode === "webcontainer" ? (
+              isGenerating ? (
+                <DynamicWebContainerPreview
+                  projectData={{
+                    name: projectName,
+                    description: oneLiner,
+                  }}
+                  env={previewEnv}
+                  onCodeLoaded={handleCodeLoadedForMode("webcontainer")}
+                  onCancel={cancelGeneration}
+                  messages={loaderMessages}
+                />
+              ) : loadedCode ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="truncate">📄 {loadedCode.filename}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={retryPreview}
+                      aria-label="Reintentar previsualización"
+                      title="Reintentar"
+                      className="text-primary"
+                      disabled={isGenerating}
+                    >
+                      <RotateCcw className={`size-4 ${isGenerating ? "animate-spin" : ""}`} />
+                    </Button>
+                  </div>
+                  <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[calc(100vh-200px)]">
+                    <WebContainerPreview code={loadedCode.code} className="h-full" />
+                  </div>
+                </div>
               ) : (
                 <div className="rounded-xl border border-border/60 p-6 text-sm text-muted-foreground shadow-sm flex items-center justify-center">
                   <p className="text-center">

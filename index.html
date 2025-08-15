@@ -11,6 +11,8 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Fallback: registra COI Service Worker si no hay headers COOP/COEP -->
+    <script src="https://unpkg.com/coi-serviceworker"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

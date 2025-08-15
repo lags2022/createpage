@@ -11,4 +11,12 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Habilita COOP/COEP para WebContainers en desarrollo
+  server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      // Usamos credentialless para permitir recursos cross-origin como Google Fonts
+      "Cross-Origin-Embedder-Policy": "credentialless",
+    },
+  },
 });
