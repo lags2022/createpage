@@ -282,7 +282,7 @@ function AppContent() {
             </div>
           </div>
         </header>
-        <div className="flex-1 min-h-0 overflow-hidden p-4 md:p-8">
+        <div className="flex-1 min-h-0 overflow-hidden p-4">
           <div className="mx-auto grid w-full max-w-full gap-4 min-h-full">
             {previewMode === "react-live" ? (
               isGenerating ? (
@@ -297,7 +297,7 @@ function AppContent() {
                   messages={loaderMessages}
                 />
               ) : loadedCode ? (
-                <div className="space-y-3">
+                <div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="truncate">📄 {loadedCode.filename}</span>
                     <Button
@@ -340,7 +340,7 @@ function AppContent() {
                   messages={loaderMessages}
                 />
               ) : loadedCode ? (
-                <div className="space-y-3">
+                <div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="truncate">📄 {loadedCode.filename}</span>
                     <Button
@@ -360,7 +360,7 @@ function AppContent() {
                       />
                     </Button>
                   </div>
-                  <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[calc(100vh-200px)]">
+                  <div className="flex-1 rounded-xl border border-border/60 shadow-sm overflow-hidden h-[calc(100vh-200px)]">
                     <IframePreview code={loadedCode.code} className="h-full" />
                   </div>
                 </div>
@@ -389,7 +389,7 @@ function AppContent() {
                   const files = buildFilesForSandpack(loadedCode.code);
                   const sandpackTheme = theme === "dark" ? amethyst : aquaBlue;
                   return (
-                    <div className="space-y-3">
+                    <div>
                       <SandpackProvider
                         template="react-ts"
                         files={files}
@@ -462,31 +462,13 @@ function AppContent() {
                   messages={loaderMessages}
                 />
               ) : loadedCode ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="truncate">📄 {loadedCode.filename}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={retryPreview}
-                      aria-label="Reintentar previsualización"
-                      title="Reintentar"
-                      className="text-primary"
-                      disabled={isGenerating}
-                    >
-                      <RotateCcw
-                        className={`size-4 ${
-                          isGenerating ? "animate-spin" : ""
-                        }`}
-                      />
-                    </Button>
-                  </div>
-                  <div className="flex-1 rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[calc(100vh-200px)]">
+                <div>
+                  <div className="flex-1">
                     <WebContainerPreview
                       code={loadedCode.code}
                       extras={loadedCode.extras}
-                      className="h-full"
+                      onRetry={retryPreview}
+                      isGenerating={isGenerating}
                     />
                   </div>
                 </div>

@@ -1,8 +1,17 @@
 import * as React from "react";
-import type { WebContainer, WebContainerProcess, FileSystemTree } from "@webcontainer/api";
-import { getWebContainer, acquireWebContainer, releaseWebContainer } from "@/lib/webcontainerManager";
+import type {
+  WebContainer,
+  WebContainerProcess,
+  FileSystemTree,
+} from "@webcontainer/api";
+import {
+  getWebContainer,
+  acquireWebContainer,
+  releaseWebContainer,
+} from "@/lib/webcontainerManager";
 import { buildFilesForSandpack } from "../../lib/sandpackFiles";
-import { idbGet, idbSet, idbDel } from "@/lib/idb";
+import { idbGet, idbSet } from "@/lib/idb";
+import { WcFileExplorer } from "./WcFileExplorer";
 
 import { buildFilesForWebContainerMore } from "@/lib/webcontainerMoreFiles";
 import type { DynamicFileEntry } from "@/lib/webcontainerMoreFiles";
@@ -11,9 +20,11 @@ interface WebContainerPreviewProps {
   code: string;
   extras?: DynamicFileEntry[];
   className?: string;
+  onRetry?: () => void;
+  isGenerating?: boolean;
 }
 
-export function WebContainerPreview({ code, extras, className }: WebContainerPreviewProps) {
+export function WebContainerPreview({ code, extras, className, onRetry, isGenerating = false }: WebContainerPreviewProps) {
   const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
   const [status, setStatus] = React.useState<
     "booting" | "mounting" | "installing" | "starting" | "ready" | "error"
@@ -27,7 +38,7 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
   const [wrapLines, setWrapLines] = React.useState(true);
   const [autoScroll, setAutoScroll] = React.useState(true);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
-  const [serverPort, setServerPort] = React.useState<number | null>(null);
+  // const [serverPort, setServerPort] = React.useState<number | null>(null);
   const [routePath, setRoutePath] = React.useState<string>("/");
   const [pendingPath, setPendingPath] = React.useState<string>("/");
   const [useSnapshot, setUseSnapshot] = React.useState(true);
@@ -35,6 +46,7 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
   const [cacheKey, setCacheKey] = React.useState<string | null>(null);
   const [bootStartAt, setBootStartAt] = React.useState<number | null>(null);
   const [elapsedTotal, setElapsedTotal] = React.useState<number>(0);
+  const [fileExplorerOpen, setFileExplorerOpen] = React.useState(false);
 
   function cleanLog(input: string): string {
     // Elimina códigos ANSI y normaliza saltos de línea (usar \u001B para evitar control chars en el código fuente)
@@ -50,8 +62,11 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
   }
 
   function makeFullUrl(baseUrl: string, path: string): string {
+    // Importante: preservamos search y hash del baseUrl (contienen tokens de sesión de WebContainer)
     try {
-      return new URL(normalizeRoutePath(path), baseUrl).toString();
+      const u = new URL(baseUrl);
+      u.pathname = normalizeRoutePath(path);
+      return u.toString();
     } catch {
       return baseUrl;
     }
@@ -123,7 +138,11 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
       for (const [fullPath, { code }] of Object.entries(files)) {
         const parts = fullPath.split("/").filter(Boolean);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let cursor: Record<string, any> = tree as unknown as Record<string, any>;
+        let cursor: Record<string, any> = tree as unknown as Record<
+          string,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          any
+        >;
         for (let i = 0; i < parts.length; i++) {
           const isFile = i === parts.length - 1;
           const part = parts[i];
@@ -152,9 +171,10 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
         wcRef.current = wc;
 
         // Construir archivos base y clave del snapshot
-        const files = extras && extras.length
-          ? buildFilesForWebContainerMore(extras, code)
-          : buildFilesForSandpack(code);
+        const files =
+          extras && extras.length
+            ? buildFilesForWebContainerMore(extras, code)
+            : buildFilesForSandpack(code);
         // Para WebContainers evitamos CSS externo (COEP). Limpiamos el @import remoto si existe.
         const idxCss = files["/src/index.css"];
         if (idxCss) {
@@ -204,7 +224,10 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
         try {
           await wc.fs.writeFile("/src/App.tsx", files["/src/App.tsx"].code);
           if (files["/src/index.css"]) {
-            await wc.fs.writeFile("/src/index.css", files["/src/index.css"].code);
+            await wc.fs.writeFile(
+              "/src/index.css",
+              files["/src/index.css"].code
+            );
           }
         } catch (e) {
           console.debug("No se pudo aplicar parches de código", e);
@@ -214,7 +237,7 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
         wc.on("server-ready", (_port, url) => {
           if (cancelled) return;
           setPreviewUrl(url);
-          setServerPort(_port);
+          // setServerPort(_port);
           // Mantener ruta previa (persistida)
           // setRoutePath("/");
           // setPendingPath("/");
@@ -244,9 +267,10 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
         setStatus("error");
         const msg = err instanceof Error ? err.message : String(err);
         setError(
-          msg.includes("cross-origin isolated") || msg.includes("SharedArrayBuffer")
+          msg.includes("cross-origin isolated") ||
+            msg.includes("SharedArrayBuffer")
             ? "Tu navegador no está en modo cross-origin isolated (COOP/COEP). Intenta recargar esta página; si el problema persiste, usa los modos sandpack o iframe."
-            : `No se pudo iniciar WebContainers: ${msg}`,
+            : `No se pudo iniciar WebContainers: ${msg}`
         );
       }
     }
@@ -277,8 +301,9 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
       const raw = routePath.trim();
       const normalized = raw ? (raw.startsWith("/") ? raw : `/${raw}`) : "/";
       try {
-        const url = new URL(normalized, previewUrl).toString();
-        iframeRef.current.src = url;
+        const u = new URL(previewUrl);
+        u.pathname = normalized;
+        iframeRef.current.src = u.toString();
       } catch {
         iframeRef.current.src = previewUrl;
       }
@@ -308,88 +333,126 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
   }, [routePath]);
 
   const currentStep =
-    status === "booting" ? 0 :
-    status === "mounting" ? 1 :
-    status === "installing" ? 2 :
-    status === "starting" ? 3 :
-    4;
+    status === "booting"
+      ? 0
+      : status === "mounting"
+      ? 1
+      : status === "installing"
+      ? 2
+      : status === "starting"
+      ? 3
+      : 4;
 
   const fullUrl = previewUrl ? makeFullUrl(previewUrl, routePath) : null;
 
   return (
     <div className={`flex flex-col h-full ${className ?? ""}`}>
-      <div className="p-4 mx-auto w-full">
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {[
-            "Arrancando",
-            "Montando FS",
-            useSnapshot ? "Retomando imagen" : "Instalando deps",
-            "Levantando server",
-            "Listo",
-          ].map((label, idx) => (
-            <span
-              key={`${label}-${idx}`}
-              className={`px-2 py-[2px] rounded border ${idx <= currentStep ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-border/60"}`}
+      <div className="mx-auto w-full">
+        {/* Línea de progreso con controles integrados */}
+        <div className="mb-2 flex items-center justify-between text-xs">
+          {/* Pasos de progreso */}
+          <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+            {[
+              "Arrancando",
+              "Montando FS",
+              useSnapshot ? "Retomando imagen" : "Instalando deps",
+              "Levantando server",
+              "Listo",
+            ].map((label, idx) => (
+              <span
+                key={`${label}-${idx}`}
+                className={`px-2 py-[2px] rounded border ${idx <= currentStep ? "bg-primary/10 text-primary border-primary/30" : "bg-muted text-muted-foreground border-border/60"}`}
+              >
+                {label}
+                {idx === currentStep && status !== "ready" && status !== "error" && elapsedTotal > 0 && (
+                  <span className="ml-1 text-xs opacity-75">({elapsedTotal}s)</span>
+                )}
+              </span>
+            ))}
+          </div>
+          
+          {/* Controles de navegación */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted text-xs"
+              onClick={() => setFileExplorerOpen(true)}
+              disabled={!wcRef.current}
             >
-              {label}
-              {idx === currentStep && status !== "ready" && status !== "error" && elapsedTotal > 0 && (
-                <span className="ml-1 text-xs opacity-75">({elapsedTotal}s)</span>
-              )}
-            </span>
-          ))}
+              Archivos
+            </button>
+            <input
+              aria-label="Ruta del preview"
+              className="w-20 px-2 py-1 rounded border border-border/60 bg-background text-xs"
+              placeholder="/"
+              value={pendingPath}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setPendingPath(e.target.value)
+              }
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === "Enter")
+                  setRoutePath(normalizeRoutePath(pendingPath));
+              }}
+              disabled={!previewUrl}
+            />
+            <button
+              type="button"
+              className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted text-xs"
+              onClick={() => setRoutePath(normalizeRoutePath(pendingPath))}
+              disabled={!previewUrl}
+            >
+              Ir
+            </button>
+            <button
+              type="button"
+              className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted text-xs"
+              onClick={() => {
+                if (iframeRef.current && fullUrl) {
+                  const u = new URL(fullUrl);
+                  u.searchParams.set("_ts", Date.now().toString());
+                  iframeRef.current.src = u.toString();
+                }
+              }}
+              disabled={!previewUrl}
+            >
+              ⟳
+            </button>
+            {onRetry && (
+              <button
+                type="button"
+                className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted text-xs text-primary"
+                onClick={onRetry}
+                disabled={isGenerating}
+                title="Reintentar previsualización"
+              >
+                <span className={`${isGenerating ? "animate-spin" : ""}`}>↻</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Barra de dirección */}
-        <div className="mb-2 flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Ruta</span>
-          <input
-            aria-label="Ruta del preview"
-          className="flex-1 max-w-sm px-2 py-1 rounded border border-border/60 bg-background"
-          placeholder="/"
-          value={pendingPath}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPendingPath(e.target.value)}
-          onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === "Enter") setRoutePath(normalizeRoutePath(pendingPath));
-          }}
-          disabled={!previewUrl}
-        />
-        <button
-          type="button"
-          className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-          onClick={() => setRoutePath(normalizeRoutePath(pendingPath))}
-          disabled={!previewUrl}
-        >
-          Ir
-        </button>
-        <button
-          type="button"
-          className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-          onClick={() => {
-            if (iframeRef.current && fullUrl) {
-              const u = new URL(fullUrl);
-              u.searchParams.set("_ts", Date.now().toString());
-              iframeRef.current.src = u.toString();
-            }
-          }}
-          disabled={!previewUrl}
-        >
-          Recargar
-        </button>
-        {serverPort !== null && (
-          <span className="ml-auto text-xs text-muted-foreground">puerto: {serverPort}</span>
-        )}
-      </div>
-
-        <div className="rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[60vh] min-h-[360px]">
+        <div className="rounded-xl border border-border/60 bg-card/70 shadow-sm overflow-hidden h-[calc(100dvh-118px)] min-h-[360px]">
           {status === "ready" ? (
-            <iframe ref={iframeRef} title="WebContainer Preview" className="w-full h-full" />
+            <iframe
+              ref={iframeRef}
+              title="WebContainer Preview"
+              className="w-full h-full"
+            />
           ) : (
             <div className="p-6 text-sm text-muted-foreground h-full grid place-items-center text-center">
               <div>
                 <div className="mb-1 font-medium">
                   {status === "booting" && "Inicializando WebContainers..."}
-                  {status === "mounting" && (snapshotUsed ? "Retomando imagen desde caché..." : (useSnapshot ? "Buscando imagen en caché..." : "Montando sistema de archivos..."))}
-                  {status === "installing" && (snapshotUsed ? "Aplicando cambios..." : "Instalando dependencias (npm install)...")}
+                  {status === "mounting" &&
+                    (snapshotUsed
+                      ? "Retomando imagen desde caché..."
+                      : useSnapshot
+                      ? "Buscando imagen en caché..."
+                      : "Montando sistema de archivos...")}
+                  {status === "installing" &&
+                    (snapshotUsed
+                      ? "Aplicando cambios..."
+                      : "Instalando dependencias (npm install)...")}
                   {status === "starting" && "Iniciando Vite (npm run dev)..."}
                   {status === "error" && "Ocurrió un error"}
                 </div>
@@ -414,85 +477,30 @@ export function WebContainerPreview({ code, extras, className }: WebContainerPre
           )}
         </div>
 
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          <button
-            type="button"
-            className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-            onClick={() => setWrapLines((v) => !v)}
-          >
-            Ajuste: {wrapLines ? "activado" : "desactivado"}
-          </button>
-          <button
-            type="button"
-            className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-            onClick={() => setAutoScroll((v) => !v)}
-          >
-            Auto-scroll: {autoScroll ? "activado" : "desactivado"}
-          </button>
-          <button
-            type="button"
-            className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-            onClick={() => setLogs("")}
-          >
-            Limpiar logs
-          </button>
-          <label className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted cursor-pointer flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={useSnapshot}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUseSnapshot(e.target.checked)}
-            />
-            Usar snapshot
-          </label>
-          <button
-            type="button"
-            className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-            onClick={async () => {
-              if (cacheKey) {
-                try { await idbDel(cacheKey); } catch (e) { console.debug("No se pudo borrar caché", e); }
-              }
-            }}
-          >
-            Borrar caché
-          </button>
-          {snapshotUsed && (
-            <span className="text-muted-foreground">snapshot en uso</span>
-          )}
-          {fullUrl && (
-            <>
-              <button
-                type="button"
-                className="ml-auto px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-                onClick={() => {
-                  try {
-                    if (fullUrl) {
-                      void navigator.clipboard?.writeText(fullUrl);
-                    }
-                  } catch (e) {
-                    console.debug("No se pudo copiar URL", e);
-                  }
-                }}
-              >
-                Copiar URL
-              </button>
-              <a
-                className="px-2 py-1 rounded border border-border/60 bg-background hover:bg-muted"
-                href={fullUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Abrir en pestaña
-              </a>
-            </>
-          )}
-        </div>
-
-        <div
+        {/* <div
           ref={logsRef}
-          className={`mt-3 rounded-lg border bg-background/70 p-2 text-xs text-muted-foreground max-h-48 ${wrapLines ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"} overflow-auto font-mono`}
+          className={`mt-3 rounded-lg border bg-background/70 p-2 text-xs text-muted-foreground max-h-40 ${wrapLines ? "whitespace-pre-wrap break-words" : "whitespace-pre overflow-x-auto"} overflow-auto font-mono`}
         >
           {logs || "Logs de instalación/arranque aparecerán aquí..."}
-        </div>
+        </div> */}
+        {/* Explorador de archivos */}
+        <WcFileExplorer
+          wc={wcRef.current}
+          open={fileExplorerOpen}
+          onOpenChange={setFileExplorerOpen}
+          initialPath="/"
+          logs={logs}
+          wrapLines={wrapLines}
+          autoScroll={autoScroll}
+          onWrapLinesChange={setWrapLines}
+          onAutoScrollChange={setAutoScroll}
+          onClearLogs={() => setLogs("")}
+          useSnapshot={useSnapshot}
+          onUseSnapshotChange={setUseSnapshot}
+          snapshotUsed={snapshotUsed}
+          cacheKey={cacheKey}
+          fullUrl={fullUrl}
+        />
       </div>
     </div>
   );
