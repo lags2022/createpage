@@ -18,6 +18,8 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
+import Editor, { type OnMount, type Monaco } from "@monaco-editor/react";
+import type { editor as MonacoEditor } from "monaco-editor";
 
 // Función para detectar el tipo de archivo
 function getFileLanguage(filename: string): string {
@@ -29,7 +31,7 @@ function getFileLanguage(filename: string): string {
     case 'html': return 'html';
     case 'json': return 'json';
     case 'md': return 'markdown';
-    default: return 'text';
+    default: return 'plaintext';
   }
 }
 
@@ -184,6 +186,79 @@ export function WcFileExplorer({
   const [deleteTarget, setDeleteTarget] = React.useState<string | null>(null);
   const [opBusy, setOpBusy] = React.useState(false);
 
+  // Refs de Monaco
+  const editorRef = React.useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const monacoRef = React.useRef<Monaco | null>(null);
+
+  const isDark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const editorTheme = isDark ? "vs-dark" : "light";
+
+  const currentLanguage = React.useMemo(() => {
+    const name = selected?.split('/').pop() || '';
+    return getFileLanguage(name);
+  }, [selected]);
+
+  function applyMarkers() {
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    if (!monaco || !editor) return;
+    const model = editor.getModel?.();
+    if (!model) return;
+    const errs = content ? getBasicSyntaxErrors(content, currentLanguage) : [];
+    const markers = errs.map((e) => ({
+      startLineNumber: e.line,
+      startColumn: 1,
+      endLineNumber: e.line,
+      endColumn: 1,
+      message: e.message,
+      severity: monaco.MarkerSeverity.Error,
+    }));
+    monaco.editor.setModelMarkers(model, "wc-basic-lint", markers);
+  }
+
+  const handleEditorMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor as MonacoEditor.IStandaloneCodeEditor;
+    monacoRef.current = monaco;
+    // Ajustes de TypeScript en Monaco para evitar mostrar errores rojos de JSX/imports
+    // Nota: se cambió para evitar mostrar el rojo cuando el editor no tiene el proyecto completo cargado
+    try {
+      const ts = monaco.languages.typescript;
+      const moduleResolutionBundler =
+        (ts.ModuleResolutionKind as unknown as Record<string, number>).Bundler;
+      const MRK = ts.ModuleResolutionKind as unknown as Record<string, number>;
+      const moduleResolution =
+        moduleResolutionBundler ?? MRK.Node16 ?? MRK.NodeJs ?? ts.ModuleResolutionKind.Classic;
+      const ST = ts.ScriptTarget as unknown as Record<string, number>;
+      const target = ST.ES2022 ?? ST.ES2020 ?? ST.ESNext;
+      ts.typescriptDefaults.setCompilerOptions({
+        jsx: ts.JsxEmit.ReactJSX,
+        moduleResolution,
+        module: ts.ModuleKind.ESNext,
+        target: target as unknown as typeof ts.ScriptTarget[keyof typeof ts.ScriptTarget],
+        allowJs: true,
+        allowSyntheticDefaultImports: true,
+        esModuleInterop: true,
+        noEmit: true,
+        skipLibCheck: true,
+      });
+      ts.typescriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true, // solo sintaxis para evitar falsos positivos de imports
+        noSyntaxValidation: false,
+      });
+    } catch {
+      // noop
+    }
+    // Atajo Guardar
+    try {
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+        void saveFile();
+      });
+    } catch {
+      // noop
+    }
+    applyMarkers();
+  }
+
   // Cargar raíz al abrir
   React.useEffect(() => {
     if (!open) return;
@@ -196,6 +271,12 @@ export function WcFileExplorer({
   React.useEffect(() => {
     treeRef.current = tree;
   }, [tree]);
+
+  // Actualizar marcadores al cambiar contenido o archivo
+  React.useEffect(() => {
+    applyMarkers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, selected]);
 
   async function loadRoot() {
     setLoading(true);
@@ -568,18 +649,18 @@ export function WcFileExplorer({
               </label>
               <div className="flex items-center gap-2 ml-auto">
                 <Button variant="outline" size="sm" onClick={() => void createFile()}>
-                  <FilePlus className="size-4" /> Archivo
+                  <FilePlus className="size-4" /> 
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => void createFolder()}>
-                  <FolderPlus className="size-4" /> Carpeta
+                  <FolderPlus className="size-4" /> 
                 </Button>
                 {selected && (
                   <>
                     <Button variant="outline" size="sm" onClick={() => openRenameDialog(selected!)}>
-                      <Pencil className="size-4" /> Renombrar
+                      <Pencil className="size-4" /> 
                     </Button>
                     <Button variant="destructive" size="sm" onClick={() => openDeleteDialog(selected!)}>
-                      <Trash2 className="size-4" /> Eliminar
+                      <Trash2 className="size-4" /> 
                     </Button>
                   </>
                 )}
@@ -618,25 +699,32 @@ export function WcFileExplorer({
             <div className="flex-1 overflow-hidden">
               {selected ? (
                 <div className="relative w-full h-full">
-                  <textarea
-                    spellCheck={false}
-                    className="w-full h-full resize-none px-3 py-2 font-mono text-sm bg-background outline-none border-0"
-                    style={{
-                      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Monaco, Inconsolata, "Roboto Mono", Consolas, "Courier New", monospace',
-                      lineHeight: '1.5',
-                      tabSize: 2
-                    }}
+                  <Editor
+                    height="100%"
                     value={content}
-                    onChange={(e) => {
-                      setContent(e.target.value);
+                    language={currentLanguage}
+                    theme={editorTheme}
+                    path={selected}
+                    onMount={handleEditorMount}
+                    onChange={(val) => {
+                      setContent(val ?? "");
                       setDirty(true);
                     }}
-                    placeholder="Escribe tu código aquí..."
+                    options={{
+                      automaticLayout: true,
+                      minimap: { enabled: false },
+                      fontSize: 13,
+                      tabSize: 2,
+                      scrollBeyondLastLine: false,
+                      wordWrap: "on",
+                      smoothScrolling: true,
+                      contextmenu: true,
+                    }}
                   />
                   
                   {/* Indicador de errores de sintaxis simple */}
                   <div className="absolute bottom-2 right-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded border">
-                    {getFileLanguage(selected.split('/').pop() || '').toUpperCase()}
+                    {currentLanguage.toUpperCase()}
                     {content.length > 0 && (
                       <span className="ml-2">
                         {content.split('\n').length} líneas
@@ -645,11 +733,11 @@ export function WcFileExplorer({
                   </div>
                   
                   {/* Validación básica de sintaxis */}
-                  {content && getBasicSyntaxErrors(content, getFileLanguage(selected.split('/').pop() || '')).length > 0 && (
+                  {content && getBasicSyntaxErrors(content, currentLanguage).length > 0 && (
                     <div className="absolute top-0 right-0 mt-2 mr-2 max-w-xs">
                       <div className="bg-destructive/90 text-destructive-foreground text-xs p-2 rounded shadow-lg">
                         <div className="font-medium mb-1">Errores de sintaxis:</div>
-                        {getBasicSyntaxErrors(content, getFileLanguage(selected.split('/').pop() || '')).slice(0, 3).map((error, idx) => (
+                        {getBasicSyntaxErrors(content, currentLanguage).slice(0, 3).map((error, idx) => (
                           <div key={idx} className="text-xs opacity-90">
                             Línea {error.line}: {error.message}
                           </div>
