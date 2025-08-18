@@ -9,7 +9,6 @@ import {
   acquireWebContainer,
   releaseWebContainer,
 } from "@/lib/webcontainerManager";
-import { buildFilesForSandpack } from "../../lib/sandpackFiles";
 import { idbGet, idbSet } from "@/lib/idb";
 import { WcFileExplorer } from "./WcFileExplorer";
 
@@ -44,9 +43,17 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
   const [useSnapshot, setUseSnapshot] = React.useState(true);
   const [snapshotUsed, setSnapshotUsed] = React.useState(false);
   const [cacheKey, setCacheKey] = React.useState<string | null>(null);
+  // Mantener el valor actual de useSnapshot para usarlo dentro del efecto de boot sin requerir dependencia
+  const useSnapshotRef = React.useRef(useSnapshot);
+  React.useEffect(() => {
+    useSnapshotRef.current = useSnapshot;
+  }, [useSnapshot]);
   const [bootStartAt, setBootStartAt] = React.useState<number | null>(null);
   const [elapsedTotal, setElapsedTotal] = React.useState<number>(0);
   const [fileExplorerOpen, setFileExplorerOpen] = React.useState(false);
+  // Captura del código y extras iniciales para booteo único; actualizaciones se aplican en efecto separado
+  const initialCodeRef = React.useRef(code);
+  const initialExtrasRef = React.useRef(extras);
 
   function cleanLog(input: string): string {
     // Elimina códigos ANSI y normaliza saltos de línea (usar \u001B para evitar control chars en el código fuente)
@@ -171,10 +178,12 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
         wcRef.current = wc;
 
         // Construir archivos base y clave del snapshot
-        const files =
-          extras && extras.length
-            ? buildFilesForWebContainerMore(extras, code)
-            : buildFilesForSandpack(code);
+        // Siempre usamos buildFilesForWebContainerMore para garantizar
+        // que existan /src/main.tsx y /src/index.css (fallbacks incluidos)
+        const files = buildFilesForWebContainerMore(
+          initialExtrasRef.current ?? [],
+          initialCodeRef.current
+        );
         // Para WebContainers evitamos CSS externo (COEP). Limpiamos el @import remoto si existe.
         const idxCss = files["/src/index.css"];
         if (idxCss) {
@@ -191,7 +200,7 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
 
         setStatus("mounting");
         let usedSnap = false;
-        if (useSnapshot) {
+        if (useSnapshotRef.current) {
           try {
             const snap = await idbGet<FileSystemTree>(key);
             if (snap) {
@@ -233,9 +242,15 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
           console.debug("No se pudo aplicar parches de código", e);
         }
 
+        // Temporizador de seguridad: si Vite no emite "server-ready" en tiempo, fallar con mensaje claro
+        let readyTimeout: ReturnType<typeof setTimeout> | null = null;
         setStatus("starting");
         wc.on("server-ready", (_port, url) => {
           if (cancelled) return;
+          if (readyTimeout) {
+            clearTimeout(readyTimeout);
+            readyTimeout = null;
+          }
           setPreviewUrl(url);
           // setServerPort(_port);
           // Mantener ruta previa (persistida)
@@ -244,7 +259,7 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
           setStatus("ready");
           setBootStartAt(null); // detener timer
           // Guardar snapshot en segundo plano
-          if (useSnapshot) {
+          if (useSnapshotRef.current) {
             void (async () => {
               try {
                 const snap = await wc.export("json");
@@ -259,8 +274,34 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
         const dev = await wc.spawn("npm", ["run", "dev"]);
         procRef.current = dev;
         streamOutput(dev);
-        // Mantener el proceso corriendo; no esperamos exit.
-        await dev.exit;
+        // Programar timeout si no llega "server-ready" en 30s
+        readyTimeout = setTimeout(() => {
+          if (cancelled) return;
+          setStatus("error");
+          setError("El servidor de desarrollo no respondió a tiempo. Revisa los logs de Vite.");
+          try {
+            procRef.current?.kill();
+          } catch (e) {
+            console.debug("proc kill tras timeout", e);
+          }
+        }, 30000);
+
+        // Mantener el proceso corriendo; no esperamos exit. Si termina, informamos.
+        void dev.exit
+          .then((code) => {
+            if (cancelled) return;
+            if (code !== 0) {
+              setStatus("error");
+              setError(`El servidor de desarrollo se detuvo con código ${code}.`);
+            }
+          })
+          .catch((e) => {
+            if (cancelled) return;
+            setStatus("error");
+            setError(
+              `El servidor de desarrollo terminó con error: ${e instanceof Error ? e.message : String(e)}`
+            );
+          });
       } catch (err) {
         if (cancelled) return;
         console.error("WebContainer error:", err);
@@ -288,7 +329,7 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
       setPreviewUrl(null);
       releaseWebContainer();
     };
-  }, [code, useSnapshot, extras]);
+  }, []);
 
   React.useEffect(() => {
     if (autoScroll && logsRef.current) {
@@ -309,6 +350,44 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
       }
     }
   }, [status, previewUrl, routePath]);
+
+  // Aplicar actualizaciones de código y archivos extra sin reiniciar el contenedor
+  React.useEffect(() => {
+    const wc = wcRef.current;
+    if (!wc) return;
+    if (status !== "ready") return;
+    let cancelled = false;
+    async function applyUpdates(w: WebContainer) {
+      try {
+        // Actualizar /src/App.tsx con el nuevo código
+        await w.fs.writeFile("/src/App.tsx", code);
+        // Escribir archivos extra si se proporcionan
+        if (extras && extras.length) {
+          for (const entry of extras) {
+            // Aceptar varias formas de ruta y normalizar
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const anyEntry = entry as any;
+            const rawPath: unknown = (entry && (entry.path as unknown))
+              ?? anyEntry?.file
+              ?? anyEntry?.["path "]
+              ?? anyEntry?.Path
+              ?? anyEntry?.PATH;
+            if (typeof rawPath !== "string" || !rawPath.trim()) continue;
+            const normalized = (rawPath.startsWith("/") ? rawPath : `/${rawPath}`).replace(/\\+/g, "/");
+            const rawCode: unknown = (entry && (entry.code as unknown)) ?? anyEntry?.contents ?? anyEntry?.content;
+            if (typeof rawCode !== "string") continue;
+            await w.fs.writeFile(normalized, rawCode);
+          }
+        }
+      } catch (e) {
+        if (!cancelled) console.debug("No se pudo aplicar actualización de código", e);
+      }
+    }
+    void applyUpdates(wc);
+    return () => {
+      cancelled = true;
+    };
+  }, [code, extras, status]);
 
   // Persistir ruta del preview en localStorage
   React.useEffect(() => {

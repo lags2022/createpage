@@ -9,5 +9,6 @@
     "paths": {
       "@/*": ["./src/*"]
     }
-  }
+  },
+  "exclude": ["src/constants/fallback/**/*"]   // 👈 excluye el fallback
 }
