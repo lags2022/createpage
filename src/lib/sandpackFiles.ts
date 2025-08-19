@@ -1,3 +1,6 @@
+
+import  packageLock from "../constants/fallback/package-lock.json";
+
 export function buildFilesForSandpack(code: string) {
   // Estructura tipo Vite: /index.html + /src/main.tsx + /src/App.tsx + Tailwind por PostCSS
   const appFile = "/src/App.tsx";
@@ -60,7 +63,6 @@ autoprefixer: {},
   </body>
 </html>`,
     },
-
     "/tailwind.config.ts": {
       code: `import type { Config } from 'tailwindcss'
 
@@ -420,6 +422,13 @@ Thumbs.db`,
   </defs>
   <path fill="url(#g)" d="M399.6 57.7L215.6 388.4c-3.7 6.6-13.3 6.6-17 0L10.4 57.7c-4.2-7.6 2.3-16.7 10.8-15.4l174.8 27.3a10 10 0 0 0 11.6-7.7l27.1-104.6c2.1-7.9 13.4-7.9 15.6 0l27.1 104.6a10 10 0 0 0 11.6 7.7l174.8-27.3c8.5-1.3 15 7.8 10.8 15.4z"/>
 </svg>`,
+    },
+    "package-lock.json": {
+      code: JSON.stringify(
+        packageLock,
+        null,
+        2
+      ),
     },
   };
 
