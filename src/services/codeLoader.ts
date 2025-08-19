@@ -145,6 +145,7 @@ export async function loadCodeForEnv(
         if (!filesArr.length) throw new Error("Respuesta sin archivos");
         const appEntry =
           filesArr.find((f) => /App\.(t|j)sx?$/.test(f.path)) || filesArr[0];
+        console.log("App entry:", appEntry);
         return {
           file: appEntry.path,
           code: appEntry.code,
