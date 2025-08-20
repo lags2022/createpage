@@ -56,7 +56,7 @@ function AppContent() {
   const canContinue =
     projectName.trim().length > 2 && oneLiner.trim().length > 5 && !tooLong;
   type PreviewMode = "react-live" | "iframe" | "sandpack" | "webcontainer";
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("react-live");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("webcontainer");
   // Entorno de datos (mock / n8n)
   const [previewEnv, setPreviewEnv] = useState<PreviewEnv>(DEFAULT_PREVIEW_ENV);
   // Estados por modo: generación y código cargado
@@ -185,12 +185,12 @@ function AppContent() {
                     aria-describedby="oneLinerHelp oneLinerCount"
                     className="min-h-[96px]"
                   />
-                  <p
+                  {/* <p
                     id="oneLinerHelp"
                     className="text-xs text-muted-foreground"
                   >
                     Sé específico sobre qué problema resuelves y para quién.
-                  </p>
+                  </p> */}
                   <div
                     id="oneLinerCount"
                     className={`text-xs ${
@@ -213,7 +213,7 @@ function AppContent() {
                       id="previewMode"
                       aria-label="Modo de previsualización"
                     >
-                      <SelectValue placeholder="react-live" />
+                      <SelectValue placeholder="webcontainer" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="webcontainer">webcontainer</SelectItem>
@@ -222,9 +222,9 @@ function AppContent() {
                       <SelectItem value="iframe">iframe</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
+                  {/* <p className="text-xs text-muted-foreground">
                     Modos activos: react-live, iframe, sandpack y webcontainer.
-                  </p>
+                  </p> */}
                 </div>
 
                 <div className="pt-1">
@@ -262,9 +262,9 @@ function AppContent() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
+                  {/* <p className="text-xs text-muted-foreground">
                     Soporta mock (1 ó varios componentes) y n8n (1 componente). "more-components" IA aún en desarrollo.
-                  </p>
+                  </p> */}
                 </div>
               </form>
             </SidebarGroupContent>
