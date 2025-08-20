@@ -106,12 +106,24 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
     async function ensureCOI() {
       // Intenta registrar el COI service worker si no hay COI.
       if (!globalThis.crossOriginIsolated && "serviceWorker" in navigator) {
+        const injectScript = (src: string) =>
+          new Promise<void>((res, rej) => {
+            if (document.querySelector(`script[src='${src}']`)) return res();
+            const s = document.createElement("script");
+            s.type = "module";
+            s.src = src;
+            s.onload = () => res();
+            s.onerror = () => rej();
+            document.head.appendChild(s);
+          });
         try {
-          // @ts-expect-error - carga dinámica del SW externo
-          await import("https://unpkg.com/coi-serviceworker/coi-serviceworker.min.js");
-        } catch (e) {
-          // noop: si falla, el modo no será COI y mostraremos un mensaje de error luego
-          console.debug("COI SW no pudo registrarse", e);
+          await injectScript("/coi-serviceworker.min.js");
+        } catch {
+          try {
+            await injectScript("https://unpkg.com/coi-serviceworker/coi-serviceworker.min.js");
+          } catch (eCdn) {
+            console.debug("COI SW no pudo registrarse", eCdn);
+          }
         }
       }
     }
