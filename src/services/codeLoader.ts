@@ -12,8 +12,8 @@ interface CodeResponse {
 }
 
 // Simula una petición HTTP con delay para mostrar el loading
-// const simulateDelay = (ms: number = 1500) =>
-//   new Promise((resolve) => setTimeout(resolve, ms));
+const simulateDelay = (ms: number = 1500) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function loadCodeFromMock(): Promise<CodeResponse> {
   // Simular delay de red
@@ -97,7 +97,7 @@ export async function loadCodeForEnv(
     }
     case "mock-more-components": {
       // Lee un arreglo de archivos desde el mock local
-      // await simulateDelay(1000);
+      await simulateDelay(1000);
       const dataMod = await import("../mocks/data-n8n-more.json");
       const entries: DynamicFileEntry[] = Array.isArray(dataMod.default)
         ? dataMod.default

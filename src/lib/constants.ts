@@ -16,5 +16,6 @@ export const PREVIEW_ENV_OPTIONS: Array<{ id: PreviewEnv; label: string; disable
 // URLs de endpoints por entorno (solo usamos la de un componente por ahora)
 export const PREVIEW_API_URLS: Partial<Record<PreviewEnv, string>> = {
   "n8n-ia-one-component": "https://openlabmx.app.n8n.cloud/webhook-test/preview",
-  "n8n-ia-more-components": "https://openlabmx.app.n8n.cloud/webhook-test/preview",
+  // "n8n-ia-more-components": "https://openlabmx.app.n8n.cloud/webhook-test/",
+  "n8n-ia-more-components": "https://openlabmx.app.n8n.cloud/webhook/front2",
 };
