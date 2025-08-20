@@ -48,6 +48,11 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
   React.useEffect(() => {
     useSnapshotRef.current = useSnapshot;
   }, [useSnapshot]);
+  // Control de readiness y timeout compartido entre eventos y logs
+  const readyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const alreadyReadyRef = React.useRef(false);
+  // Ref para cacheKey y evitar dependencia del efecto
+  const cacheKeyRef = React.useRef<string | null>(null);
   const [bootStartAt, setBootStartAt] = React.useState<number | null>(null);
   const [elapsedTotal, setElapsedTotal] = React.useState<number>(0);
   const [fileExplorerOpen, setFileExplorerOpen] = React.useState(false);
@@ -129,6 +134,55 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
       setLogs((prev) => (prev + cleaned).slice(-20000));
     }
 
+    function maybeMarkReadyFromLogs(chunk: string) {
+      if (alreadyReadyRef.current) return;
+      const text = cleanLog(chunk);
+      // Detectar URL publicable de WebContainer
+      const urlMatch = text.match(/https?:\/\/[\w.-]*webcontainer\.io[^\s]*/i);
+      if (urlMatch && !alreadyReadyRef.current) {
+        if (readyTimeoutRef.current) {
+          clearTimeout(readyTimeoutRef.current);
+          readyTimeoutRef.current = null;
+        }
+        alreadyReadyRef.current = true;
+        setPreviewUrl(urlMatch[0]);
+        setStatus("ready");
+        setBootStartAt(null);
+        // Guardar snapshot en segundo plano si aplica
+        const keyRef = cacheKeyRef.current;
+        if (useSnapshotRef.current && keyRef) {
+          const wc = wcRef.current;
+          if (wc) {
+            void (async () => {
+              try {
+                const snap = await wc.export("json");
+                await idbSet(keyRef, snap as unknown as FileSystemTree);
+              } catch (e) {
+                console.debug("No se pudo exportar snapshot (fallback logs)", e);
+              }
+            })();
+          }
+        }
+        return;
+      }
+      // Señales de Vite "ready" sin URL: acortar timeout a 5s para fallar antes si no hay URL
+      if (/ready in \d+\s?ms|Local:\s|Network:\s/i.test(text)) {
+        if (!alreadyReadyRef.current) {
+          if (readyTimeoutRef.current) clearTimeout(readyTimeoutRef.current);
+          readyTimeoutRef.current = setTimeout(() => {
+            if (alreadyReadyRef.current) return;
+            setStatus("error");
+            setError("Vite parece listo, pero no expuso una URL accesible. Revisa los logs.");
+            try {
+              procRef.current?.kill();
+            } catch (e) {
+              console.debug("proc kill tras fallback de logs", e);
+            }
+          }, 5000);
+        }
+      }
+    }
+
     async function streamOutput(proc: WebContainerProcess) {
       const reader = proc.output.getReader();
       const decoder = new TextDecoder();
@@ -139,8 +193,11 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
           // value puede ser string o Uint8Array según el runtime/TS defs
           if (typeof value === "string") {
             appendLog(value);
+            maybeMarkReadyFromLogs(value);
           } else if (value) {
-            appendLog(decoder.decode(value));
+            const txt = decoder.decode(value);
+            appendLog(txt);
+            maybeMarkReadyFromLogs(txt);
           }
         }
       } catch (e) {
@@ -202,9 +259,11 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
           files["/src/index.css"] = { code: cleaned };
         }
         const fsTree = toFsTree(files);
-        const signatureSource = files["/package.json"]?.code ?? "";
-        const key = `wc:snap:${djb2Hash(signatureSource)}`;
+        const pkgSource = files["/package.json"]?.code ?? "";
+        const lockSource = files["/package-lock.json"]?.code ?? "";
+        const key = `wc:snap:${djb2Hash(pkgSource + "|" + lockSource)}`;
         setCacheKey(key);
+        cacheKeyRef.current = key;
 
         setStatus("mounting");
         let usedSnap = false;
@@ -228,13 +287,119 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
 
         if (!usedSnap) {
           setStatus("installing");
-          const install = await wc.spawn("npm", ["install"]);
-          streamOutput(install);
-          const installExitCode = await install.exit;
-          if (cancelled) return;
-          if (installExitCode !== 0) {
-            throw new Error("npm install falló dentro de WebContainer");
+          let usedCi = false;
+          // Intentar usar npm ci si hay package-lock.json montado
+          try {
+            await wc.fs.readFile("/package-lock.json", "utf-8");
+            const ci = await wc.spawn("npm", [
+              "ci",
+              "--no-audit",
+              "--no-fund",
+              "--loglevel=warn",
+            ]);
+            streamOutput(ci);
+            const codeCi = await ci.exit;
+            if (cancelled) return;
+            if (codeCi === 0) {
+              usedCi = true;
+            }
+          } catch {
+            // no lockfile o error al leerlo -> continuar a install
           }
+
+          if (!usedCi) {
+            const install = await wc.spawn("npm", [
+              "install",
+              "--no-audit",
+              "--no-fund",
+              "--loglevel=warn",
+            ]);
+            streamOutput(install);
+            const installExitCode = await install.exit;
+            if (cancelled) return;
+            if (installExitCode !== 0) {
+              throw new Error("npm install falló dentro de WebContainer");
+            }
+          }
+        }
+
+        // Instalar dependencias adicionales requeridas por extras si no están en package.json
+        try {
+          const extrasList = initialExtrasRef.current ?? [];
+          if (extrasList.length > 0) {
+            const declared = await (async () => {
+              try {
+                const pkgStr = await wc.fs.readFile("/package.json", "utf-8");
+                const pkg = JSON.parse(String(pkgStr) || "{}") as {
+                  dependencies?: Record<string, string>;
+                  devDependencies?: Record<string, string>;
+                };
+                return new Set([
+                  ...Object.keys(pkg.dependencies ?? {}),
+                  ...Object.keys(pkg.devDependencies ?? {}),
+                ]);
+              } catch {
+                try {
+                  const pkg = JSON.parse(pkgSource || "{}") as {
+                    dependencies?: Record<string, string>;
+                    devDependencies?: Record<string, string>;
+                  };
+                  return new Set([
+                    ...Object.keys(pkg.dependencies ?? {}),
+                    ...Object.keys(pkg.devDependencies ?? {}),
+                  ]);
+                } catch {
+                  return new Set<string>();
+                }
+              }
+            })();
+            const wanted = new Set<string>();
+            const addSpec = (raw: string) => {
+              if (!raw) return;
+              if (raw.startsWith(".") || raw.startsWith("/")) return; // rutas locales
+              if (raw.includes("://")) return; // URL absoluta
+              if (raw.startsWith("node:") || raw.startsWith("data:") || raw.startsWith("vite:") || raw.startsWith("virtual:")) return; // esquemas especiales
+              if (raw.startsWith("#")) return; // import maps con ancla
+              let name = raw;
+              if (raw.startsWith("@")) {
+                const parts = raw.split("/");
+                if (parts.length >= 2) name = `${parts[0]}/${parts[1]}`;
+              } else {
+                name = raw.split("/")[0];
+              }
+              if (!declared.has(name)) wanted.add(name);
+            };
+            for (const e of extrasList) {
+              const c = String((e as unknown as { code?: string })?.code ?? "");
+              // import ... from 'pkg'
+              const reFrom = /from\s+['"]([^'")]+)['"]/g; let m: RegExpExecArray | null;
+              while ((m = reFrom.exec(c))) addSpec(m[1]);
+              // import('pkg')
+              const reDyn = /import\(\s*['"]([^'")]+)['"]\s*\)/g; let m2: RegExpExecArray | null;
+              while ((m2 = reDyn.exec(c))) addSpec(m2[1]);
+              // require('pkg')
+              const reReq = /require\(\s*['"]([^'")]+)['"]\s*\)/g; let m3: RegExpExecArray | null;
+              while ((m3 = reReq.exec(c))) addSpec(m3[1]);
+            }
+            const toInstall = Array.from(wanted);
+            if (toInstall.length > 0) {
+              const installExtra = await wc.spawn("npm", [
+                "install",
+                ...toInstall,
+                "--no-audit",
+                "--no-fund",
+                "--loglevel=warn",
+              ]);
+              streamOutput(installExtra);
+              const codeExtra = await installExtra.exit;
+              if (cancelled) return;
+              if (codeExtra !== 0) {
+                throw new Error(`npm install de extras falló: ${toInstall.join(", ")}`);
+              }
+            }
+          }
+        } catch (e) {
+          console.debug("Instalación condicional de extras falló (continuando)", e);
         }
 
         // Asegurar que el código fuente actual se aplique (por si el snapshot existe pero el código cambió)
@@ -251,14 +416,14 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
         }
 
         // Temporizador de seguridad: si Vite no emite "server-ready" en tiempo, fallar con mensaje claro
-        let readyTimeout: ReturnType<typeof setTimeout> | null = null;
         setStatus("starting");
         wc.on("server-ready", (_port, url) => {
           if (cancelled) return;
-          if (readyTimeout) {
-            clearTimeout(readyTimeout);
-            readyTimeout = null;
+          if (readyTimeoutRef.current) {
+            clearTimeout(readyTimeoutRef.current);
+            readyTimeoutRef.current = null;
           }
+          alreadyReadyRef.current = true;
           setPreviewUrl(url);
           // setServerPort(_port);
           // Mantener ruta previa (persistida)
@@ -283,7 +448,7 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
         procRef.current = dev;
         streamOutput(dev);
         // Programar timeout si no llega "server-ready" en 30s
-        readyTimeout = setTimeout(() => {
+        readyTimeoutRef.current = setTimeout(() => {
           if (cancelled) return;
           setStatus("error");
           setError("El servidor de desarrollo no respondió a tiempo. Revisa los logs de Vite.");
@@ -335,6 +500,10 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
       }
       // Liberar la instancia global si nadie más la usa
       setPreviewUrl(null);
+      if (readyTimeoutRef.current) {
+        clearTimeout(readyTimeoutRef.current);
+        readyTimeoutRef.current = null;
+      }
       releaseWebContainer();
     };
   }, []);

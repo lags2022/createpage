@@ -69,6 +69,14 @@ export default function App() {
 }`
 ) {
   const base = buildFilesForSandpack(defaultAppCode);
+  
+  // WebContainer: mantener el package.json y package-lock.json de la plantilla base
+  // (proveniente de buildFilesForSandpack) para permitir un `npm ci` rápido y
+  // determinista. Esto recupera los tiempos de ~10s observados con lockfile.
+  // Se evitan modificaciones al package.json aquí para no invalidar el lock.
+  // Además, removemos tooling de lint/format innecesario dentro del contenedor.
+  // delete (base as Record<string, unknown>)["/.eslintrc.cjs"];
+  // delete (base as Record<string, unknown>)["/.prettierrc"];
 
   for (const entry of extras) {
     // Aceptar variantes comunes de la clave de ruta

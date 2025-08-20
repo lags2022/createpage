@@ -1,9 +1,43 @@
-
-import  packageLock from "../constants/fallback/package-lock.json";
+import packageLock from "../constants/fallback/package-lock.json";
+// Nota: Este lockfile de fallback se incluye en la plantilla base.
+// En WebContainers permite usar `npm ci` para instalaciones rápidas y deterministas.
 
 export function buildFilesForSandpack(code: string) {
   // Estructura tipo Vite: /index.html + /src/main.tsx + /src/App.tsx + Tailwind por PostCSS
   const appFile = "/src/App.tsx";
+  // .prettierrc: Solo para experiencia de editor (Sandpack/IDE). WebContainer lo purga.
+  //     "/.prettierrc": {
+  //       code: `{
+  //   "semi": false,
+  //   "tabWidth": 2,
+  //   "singleQuote": true,
+  //   "trailingComma": "all",
+  //   "plugins": ["prettier-plugin-tailwindcss"]
+  // }`,
+  //     },
+  //     // .eslintrc.cjs: Solo para experiencia de editor (Sandpack/IDE). WebContainer lo purga.
+  //     "/.eslintrc.cjs": {
+  //       code: `module.exports = {
+  //   root: true,
+  //   env: { browser: true, es2020: true },
+  //   extends: [
+  //     'eslint:recommended',
+  //     'plugin:@typescript-eslint/recommended',
+  //     'plugin:react-hooks/recommended',
+  //   ],
+  //   ignorePatterns: ['dist', '.eslintrc.cjs'],
+  //   parser: '@typescript-eslint/parser',
+  //   plugins: ['react-refresh'],
+  //   rules: {
+  //     'react-refresh/only-export-components': [
+  //       'warn',
+  //       { allowConstantExport: true },
+  //     ],
+  //     '@typescript-eslint/no-explicit-any': 'off',
+  //   },
+  // }`,
+  //     },
+
   // const indexFile = "/src/main.tsx";
 
   //   [indexFile]: {
@@ -38,6 +72,12 @@ export function buildFilesForSandpack(code: string) {
   // },
   // }`,
   // },
+  // Importante:
+  // - Esta plantilla incluye archivos de tooling como `/.eslintrc.cjs` y `/.prettierrc`
+  //   para mejorar la experiencia en el IDE/Sandpack (lint/format en el editor).
+  // - Cuando montamos en WebContainers, estos archivos se eliminan explícitamente
+  //   en `buildFilesForWebContainerMore()` para evitar instalaciones/lints innecesarios
+  //   y mejorar el tiempo de arranque.
   const files: Record<string, { code: string }> = {
     [appFile]: { code },
     "/postcss.config.js": {
@@ -184,14 +224,14 @@ export default config`,
     "/package.json": {
       code: JSON.stringify(
         {
-          name: "react-airbnb-clone-mvp",
+          name: "react-startnow-mvp",
           private: true,
           version: "0.0.0",
           type: "module",
           scripts: {
             dev: "vite",
             build: "tsc && vite build",
-            lint: "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+            // lint: "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
             preview: "vite preview",
           },
           dependencies: {
@@ -206,16 +246,16 @@ export default config`,
             "@types/node": "^24.2.1",
             "@types/react": "^18.2.66",
             "@types/react-dom": "^18.2.22",
-            "@typescript-eslint/eslint-plugin": "^7.2.0",
-            "@typescript-eslint/parser": "^7.2.0",
+            // "@typescript-eslint/eslint-plugin": "^7.2.0",
+            // "@typescript-eslint/parser": "^7.2.0",
             "@vitejs/plugin-react": "^4.2.1",
             autoprefixer: "^10.4.19",
-            eslint: "^8.57.0",
-            "eslint-plugin-react-hooks": "^4.6.0",
-            "eslint-plugin-react-refresh": "^0.4.6",
+            // eslint: "^8.57.0",
+            // "eslint-plugin-react-hooks": "^4.6.0",
+            // "eslint-plugin-react-refresh": "^0.4.6",
             postcss: "^8.4.38",
-            prettier: "^3.2.5",
-            "prettier-plugin-tailwindcss": "^0.5.14",
+            // prettier: "^3.2.5",
+            // "prettier-plugin-tailwindcss": "^0.5.14",
             tailwindcss: "^3.4.3",
             typescript: "^5.2.2",
             vite: "^5.2.0",
@@ -239,36 +279,6 @@ export default defineConfig({
     },
   },
 })`,
-    },
-    "/.prettierrc": {
-      code: `{
-  "semi": false,
-  "tabWidth": 2,
-  "singleQuote": true,
-  "trailingComma": "all",
-  "plugins": ["prettier-plugin-tailwindcss"]
-}`,
-    },
-    "/.eslintrc.cjs": {
-      code: `module.exports = {
-  root: true,
-  env: { browser: true, es2020: true },
-  extends: [
-    'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
-    'plugin:react-hooks/recommended',
-  ],
-  ignorePatterns: ['dist', '.eslintrc.cjs'],
-  parser: '@typescript-eslint/parser',
-  plugins: ['react-refresh'],
-  rules: {
-    'react-refresh/only-export-components': [
-      'warn',
-      { allowConstantExport: true },
-    ],
-    '@typescript-eslint/no-explicit-any': 'off',
-  },
-}`,
     },
     "/.gitignore": {
       code: `# Logs
@@ -411,24 +421,8 @@ dist/
 ehthumbs.db
 Thumbs.db`,
     },
-    "/vite.svg": {
-      code: `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 410 404">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#41D1FF" offset="0%"/>
-      <stop stop-color="#BD34FE" offset="100%"/>
-    </linearGradient>
-  </defs>
-  <path fill="url(#g)" d="M399.6 57.7L215.6 388.4c-3.7 6.6-13.3 6.6-17 0L10.4 57.7c-4.2-7.6 2.3-16.7 10.8-15.4l174.8 27.3a10 10 0 0 0 11.6-7.7l27.1-104.6c2.1-7.9 13.4-7.9 15.6 0l27.1 104.6a10 10 0 0 0 11.6 7.7l174.8-27.3c8.5-1.3 15 7.8 10.8 15.4z"/>
-</svg>`,
-    },
     "package-lock.json": {
-      code: JSON.stringify(
-        packageLock,
-        null,
-        2
-      ),
+      code: JSON.stringify(packageLock, null, 2),
     },
   };
 
