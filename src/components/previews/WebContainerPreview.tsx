@@ -118,12 +118,8 @@ export function WebContainerPreview({ code, extras, className, onRetry, isGenera
           });
         try {
           await injectScript("/coi-serviceworker.min.js");
-        } catch {
-          try {
-            await injectScript("https://unpkg.com/coi-serviceworker/coi-serviceworker.min.js");
-          } catch (eCdn) {
-            console.debug("COI SW no pudo registrarse", eCdn);
-          }
+        } catch (eLocal) {
+          console.debug("COI SW local no pudo cargarse", eLocal);
         }
       }
     }
