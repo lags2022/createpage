@@ -168,7 +168,7 @@ function AppContent() {
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="oneLiner" className="mb-0">
-                      Describe tu idea en una frase
+                      Describe tu idea en una frase que es la que vamos a realizar
                     </Label>
                     <Badge variant="outline" className="ml-1">
                       IA Ready
